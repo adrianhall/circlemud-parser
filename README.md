@@ -85,34 +85,10 @@ Run the CLI in development mode:
 pnpm dev -- --help
 ```
 
-Type-check without emitting JavaScript:
+Run all checks:
 
 ```sh
-pnpm typecheck
-```
-
-Lint:
-
-```sh
-pnpm lint
-```
-
-Format:
-
-```sh
-pnpm format
-```
-
-Run tests:
-
-```sh
-pnpm test
-```
-
-Run tests with V8 coverage:
-
-```sh
-pnpm test:coverage
+pnpm run check
 ```
 
 ## Pre-Commit Checks

@@ -249,10 +249,10 @@ string** instead of raw numbers.
 
 Every bitvector field `fooFlags` produces two public fields:
 
-| Field           | Type                 | Content                                    |
-| --------------- | -------------------- | ------------------------------------------ |
-| `fooFlags`      | `readonly string[]`  | Human-readable flag names from constants.c |
-| `fooFlagsBits`  | `string`             | Canonical ASCII flag representation        |
+| Field          | Type                | Content                                    |
+| -------------- | ------------------- | ------------------------------------------ |
+| `fooFlags`     | `readonly string[]` | Human-readable flag names from constants.c |
+| `fooFlagsBits` | `string`            | Canonical ASCII flag representation        |
 
 The `*Bits` field always uses the ASCII letter encoding (`a`–`z` for bits 0–25, `A`–`Z` for bits
 26–51), even when the source data used a numeric value. A zero bitvector is encoded as `"0"`. For
@@ -266,16 +266,16 @@ bit 0. The `affectFlagsBits` field reflects this shifted encoding.
 
 Each bitvector field maps to a specific flag name table from `data/tbamud/src/constants.c`:
 
-| Record field                     | C flag table       | Example flags                            |
-| -------------------------------- | ------------------ | ---------------------------------------- |
-| `WorldRecord.roomFlags`          | `room_bits[]`      | DARK, DEATH, NO_MOB, INDOORS, PEACEFUL   |
-| `RoomDirection.exitFlags`        | `exit_bits[]`      | DOOR, CLOSED, LOCKED, PICKPROOF          |
-| `MobileRecord.actionFlags`      | `action_bits[]`    | SPEC, SENTINEL, SCAVENGER, ISNPC, AGGR   |
-| `MobileRecord.affectFlags`      | `affected_bits[]`  | BLIND, INVIS, DET-ALIGN, SANCT, CURSE    |
-| `ObjectRecord.extraFlags`       | `extra_bits[]`     | GLOW, HUM, NO_RENT, INVISIBLE, MAGIC     |
-| `ObjectRecord.wearFlags`        | `wear_bits[]`      | TAKE, FINGER, NECK, BODY, HEAD, WIELD    |
-| `ObjectRecord.affectFlags`      | `affected_bits[]`  | BLIND, INVIS, DET-ALIGN, SANCT, CURSE    |
-| `ZoneRecord.zoneFlags`          | `zone_bits[]`      | CLOSED, NO_IMMORT, QUEST, GRID, NOBUILD  |
+| Record field               | C flag table      | Example flags                           |
+| -------------------------- | ----------------- | --------------------------------------- |
+| `WorldRecord.roomFlags`    | `room_bits[]`     | DARK, DEATH, NO_MOB, INDOORS, PEACEFUL  |
+| `RoomDirection.exitFlags`  | `exit_bits[]`     | DOOR, CLOSED, LOCKED, PICKPROOF         |
+| `MobileRecord.actionFlags` | `action_bits[]`   | SPEC, SENTINEL, SCAVENGER, ISNPC, AGGR  |
+| `MobileRecord.affectFlags` | `affected_bits[]` | BLIND, INVIS, DET-ALIGN, SANCT, CURSE   |
+| `ObjectRecord.extraFlags`  | `extra_bits[]`    | GLOW, HUM, NO_RENT, INVISIBLE, MAGIC    |
+| `ObjectRecord.wearFlags`   | `wear_bits[]`     | TAKE, FINGER, NECK, BODY, HEAD, WIELD   |
+| `ObjectRecord.affectFlags` | `affected_bits[]` | BLIND, INVIS, DET-ALIGN, SANCT, CURSE   |
+| `ZoneRecord.zoneFlags`     | `zone_bits[]`     | CLOSED, NO_IMMORT, QUEST, GRID, NOBUILD |
 
 The parser should embed these tables as TypeScript string arrays derived from constants.c. Unknown
 bit positions (set bits with no corresponding name in the table) should produce a fallback string
@@ -481,12 +481,12 @@ export function resolveFlagNames(value: BitVector, table: FlagTable): string[];
 export function resolveFlagSetNames(set: BitVectorSet, table: FlagTable): string[];
 ```
 
-| TypeScript helper          | Purpose                                                         |
-| -------------------------- | --------------------------------------------------------------- |
-| `bitvectorToAsciiFlags`    | Convert a single numeric bitvector to ASCII letter encoding.    |
-| `bitvectorSetToAsciiFlags` | Convert a four-element bitvector set to space-separated ASCII.  |
-| `resolveFlagNames`         | Map set bits in a single bitvector to flag names from a table.  |
-| `resolveFlagSetNames`      | Map set bits across a four-element set to flag names.           |
+| TypeScript helper          | Purpose                                                        |
+| -------------------------- | -------------------------------------------------------------- |
+| `bitvectorToAsciiFlags`    | Convert a single numeric bitvector to ASCII letter encoding.   |
+| `bitvectorSetToAsciiFlags` | Convert a four-element bitvector set to space-separated ASCII. |
+| `resolveFlagNames`         | Map set bits in a single bitvector to flag names from a table. |
+| `resolveFlagSetNames`      | Map set bits across a four-element set to flag names.          |
 
 `bitvectorToAsciiFlags` is the inverse of `parseAsciiFlag`. It converts a number to the canonical
 ASCII letter representation: bits 0–25 produce `'a'`–`'z'`, bits 26–51 produce `'A'`–`'Z'`, and

@@ -1,2 +1,2 @@
 pnpm exec lint-staged
-pnpm exec tsc --noEmit
+pnpm exec run-s check-only
