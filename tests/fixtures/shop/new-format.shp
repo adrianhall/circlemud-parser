@@ -1,0 +1,30 @@
+CircleMUD v3.0 Shop File~
+#1200~
+82
+83
+-1
+1.25
+0.75
+1torch & MAGIC
+9HUM | GLOW | MAGIC
+LIQ CONTAINER water
+-1
+%s Sorry, I don't stock that item.~
+%s You don't seem to have that.~
+%s I don't trade in such items.~
+%s I can't afford that!~
+%s You are too poor!~
+%s That'll be %d coins, thanks.~
+%s I'll give you %d coins for that.~
+1
+6
+1204
+9
+1208
+1299
+-1
+0
+28
+0
+0
+$~

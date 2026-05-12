@@ -17,9 +17,17 @@ export {
   readMudString,
   skipMudSpaces,
 } from './reader.js';
-export { MobileRecord, MudRecord, ObjectRecord, WorldRecord, ZoneRecord } from './records.js';
+export {
+  MobileRecord,
+  MudRecord,
+  ObjectRecord,
+  ShopRecord,
+  WorldRecord,
+  ZoneRecord,
+} from './records.js';
 export { parseMobile, parseMobileFile } from './parsers/mobile.js';
 export { parseObject, parseObjectFile } from './parsers/object.js';
+export { parseShop, parseShopFile } from './parsers/shop.js';
 export { parseWorld, parseWorldFile } from './parsers/world.js';
 export { parseZone, parseZoneFile } from './parsers/zone.js';
 export { RecordType } from './types.js';
@@ -36,6 +44,8 @@ export type {
   ObjectAffect,
   ObjectRecordInit,
   RoomDirection,
+  ShopRecordInit,
+  ShopTradeType,
   WorldRecordInit,
   ZoneCommand,
   ZoneRecordInit,

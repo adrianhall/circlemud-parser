@@ -43,6 +43,29 @@ export const ZONE_FLAGS: FlagTable = [
 ];
 
 /**
+ * Shop flag descriptions from `data/tbamud/src/shop.c` `shop_bits[]`.
+ *
+ * @remarks Index positions must remain aligned with the C source table because parsers use the
+ * index as the public bit-position mapping.
+ */
+export const SHOP_FLAGS: FlagTable = ['WILL_FIGHT', 'USES_BANK', 'UNLIMITED_CASH'];
+
+/**
+ * Shop no-trade flag descriptions from `data/tbamud/src/shop.c` `trade_letters[]`.
+ *
+ * @remarks Set bits mean the shopkeeper refuses to trade with that customer category.
+ */
+export const TRADE_FLAGS: FlagTable = [
+  'Good',
+  'Evil',
+  'Neutral',
+  'Magic User',
+  'Cleric',
+  'Thief',
+  'Warrior',
+];
+
+/**
  * Exit flag descriptions from `data/tbamud/src/constants.c` `exit_bits[]`.
  *
  * @remarks Index positions must remain aligned with the C source table because parsers use the
