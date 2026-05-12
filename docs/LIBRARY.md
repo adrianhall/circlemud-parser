@@ -94,8 +94,9 @@ Notes:
 
 The first implementation should define the major record classes with stable top-level field names.
 Bitvector flag tables (room flags, action flags, etc.) are required from the start because the
-public API exposes resolved flag names. Fine-grained enum tables for ordinal values such as sector
-types, item types, wear positions, and apply types can be added after the raw parser is working.
+public API exposes resolved flag names. Ordinal value tables from `constants.c`, such as item types
+and apply types, should also be exposed as resolved names alongside the numeric source values as
+record parsers are implemented.
 
 ```ts
 export class WorldRecord extends MudRecord {
@@ -145,6 +146,7 @@ export class ObjectRecord extends MudRecord {
   readonly description: string | null;
   readonly actionDescription: string | null;
   readonly objectType: number;
+  readonly objectTypeName: string;
   readonly extraFlags: readonly string[];
   readonly extraFlagsBits: string;
   readonly wearFlags: readonly string[];
@@ -227,6 +229,7 @@ export interface MobileEnhancedData {
 
 export interface ObjectAffect {
   location: number;
+  locationName: string;
   modifier: number;
 }
 
@@ -283,6 +286,21 @@ such as `"UNKNOWN_17"` so no information is silently lost.
 
 `ShopRecord`, `QuestRecord`, and `TriggerRecord` should follow the same convention for any
 bitvector fields they expose.
+
+## Ordinal Resolution
+
+Source data also stores several ordinal fields as numbers, such as object item types and object
+affect apply locations. Public records preserve the numeric source value and expose a companion
+resolved-name field:
+
+| Numeric field             | Name field                    | C table         |
+| ------------------------- | ----------------------------- | --------------- |
+| `ObjectRecord.objectType` | `ObjectRecord.objectTypeName` | `item_types[]`  |
+| `ObjectAffect.location`   | `ObjectAffect.locationName`   | `apply_types[]` |
+
+Future parsers should follow the same pattern for ordinal fields: keep the numeric source field and
+add a `<field>Name` companion when there is a stable table in `constants.c`. Unknown ordinals should
+resolve to `UNKNOWN_<value>` so information is not silently lost.
 
 ## Keyword Lists And Aliases
 

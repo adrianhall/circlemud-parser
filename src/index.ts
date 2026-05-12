@@ -17,7 +17,8 @@ export {
   readMudString,
   skipMudSpaces,
 } from './reader.js';
-export { MudRecord, WorldRecord, ZoneRecord } from './records.js';
+export { MudRecord, ObjectRecord, WorldRecord, ZoneRecord } from './records.js';
+export { parseObject, parseObjectFile } from './parsers/object.js';
 export { parseWorld, parseWorldFile } from './parsers/world.js';
 export { parseZone, parseZoneFile } from './parsers/zone.js';
 export { RecordType } from './types.js';
@@ -27,6 +28,8 @@ export type { Logger, ParseOptions } from './options.js';
 export type { ReaderOptions } from './reader.js';
 export type {
   ExtraDescription,
+  ObjectAffect,
+  ObjectRecordInit,
   RoomDirection,
   WorldRecordInit,
   ZoneCommand,

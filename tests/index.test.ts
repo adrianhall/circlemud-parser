@@ -4,6 +4,7 @@ import {
   MudRecord,
   MudParserError,
   MudReader,
+  ObjectRecord,
   ParseError,
   RecordType,
   VERSION,
@@ -11,6 +12,8 @@ import {
   ZoneRecord,
   bitvectorToAsciiFlags,
   parseAsciiFlag,
+  parseObject,
+  parseObjectFile,
   parseWorld,
   parseWorldFile,
   parseZone,
@@ -34,8 +37,11 @@ describe('index', () => {
 
   it('exports zone parser values', () => {
     expect(MudRecord).toBeTypeOf('function');
+    expect(ObjectRecord).toBeTypeOf('function');
     expect(WorldRecord).toBeTypeOf('function');
     expect(ZoneRecord).toBeTypeOf('function');
+    expect(parseObject).toBeTypeOf('function');
+    expect(parseObjectFile).toBeTypeOf('function');
     expect(parseWorld).toBeTypeOf('function');
     expect(parseWorldFile).toBeTypeOf('function');
     expect(parseZone).toBeTypeOf('function');
