@@ -1,0 +1,25 @@
+#3001
+wizard mage~
+the wizard~
+A wizard ponders here.~
+Wise and mysterious.~
+a 0 0 0 0 0 0 0 250 E
+20 7 -10 5d10+50 2d4+5
+200 5000
+8 8 1
+BareHandAttack: 12
+Str: 18
+StrAdd: 75
+Int: 25
+Wis: 21
+Dex: 16
+Con: 15
+Cha: 14
+SavingPara: 2
+SavingRod: 3
+SavingPetri: 4
+SavingBreath: 5
+SavingSpell: 6
+E
+T 1400
+$

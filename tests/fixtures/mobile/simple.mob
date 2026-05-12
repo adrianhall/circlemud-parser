@@ -1,0 +1,11 @@
+#3000
+guard sentinel~
+a test guard~
+A test guard stands here.~
+He watches carefully.~
+ad 0 0 0 b 0 0 0 -100 S
+10 12 -5 2d8+20 1d6+3
+50 1000
+8 8 1
+T 1200
+$

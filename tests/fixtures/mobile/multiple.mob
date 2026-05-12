@@ -1,0 +1,21 @@
+#3002
+rat~
+a rat~
+A rat scurries here.~
+Small and hungry.~
+0 0 0 0 0 0 0 0 0 S
+1 20 9 1d1+1 1d2+0
+1 10
+8 8 0
+#3003
+clerk~
+the clerk~
+The clerk waits here.~
+Helpful.~
+0 0 0 0 0 0 0 0 100 E
+5 15 5 2d4+5 1d3+1
+10 100
+8 8 1
+E
+T 1500
+$

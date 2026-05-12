@@ -51,6 +51,35 @@ export const ZONE_FLAGS: FlagTable = [
 export const EXIT_FLAGS: FlagTable = ['DOOR', 'CLOSED', 'LOCKED', 'PICKPROOF'];
 
 /**
+ * Mobile action flag descriptions from `data/tbamud/src/constants.c` `action_bits[]`.
+ *
+ * @remarks Index positions must remain aligned with the C source table because parsers use the
+ * index as the public bit-position mapping.
+ */
+export const ACTION_FLAGS: FlagTable = [
+  'SPEC',
+  'SENTINEL',
+  'SCAVENGER',
+  'ISNPC',
+  'AWARE',
+  'AGGR',
+  'STAY-ZONE',
+  'WIMPY',
+  'AGGR_EVIL',
+  'AGGR_GOOD',
+  'AGGR_NEUTRAL',
+  'MEMORY',
+  'HELPER',
+  'NO_CHARM',
+  'NO_SUMMN',
+  'NO_SLEEP',
+  'NO_BASH',
+  'NO_BLIND',
+  'NO_KILL',
+  'DEAD',
+];
+
+/**
  * Object extra flag descriptions from `data/tbamud/src/constants.c` `extra_bits[]`.
  *
  * @remarks Index positions must remain aligned with the C source table because parsers use the
