@@ -42,14 +42,7 @@ npm install github:adrianhall/circlemud-parser
 
 ## Library Usage
 
-Current smoke-test API:
-
-```ts
-import { VERSION, hello } from '@adrianhall/circlemud-parser';
-
-console.log(VERSION);
-console.log(hello('builder'));
-```
+Review the [Library docs](docs/LIBRARY.md) for details on the library usage.
 
 ## CLI Usage
 
@@ -110,5 +103,4 @@ src/cli.ts         CLI entry point
 
 ## License
 
-The TypeScript parser project is licensed under MIT. The bundled TbaMUD source tree in
-`data/tbamud` retains its own license and copyright notices.
+The TypeScript parser project is licensed under MIT. The bundled TbaMUD source tree in `data/tbamud` retains its own license and copyright notices.
