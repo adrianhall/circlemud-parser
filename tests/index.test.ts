@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  MudRecord,
   MudParserError,
   MudReader,
+  ParseError,
   RecordType,
   VERSION,
+  ZoneRecord,
   bitvectorToAsciiFlags,
   parseAsciiFlag,
+  parseZone,
+  parseZoneFile,
   readMudNumber,
 } from '../src/index.js';
 
@@ -17,10 +22,18 @@ describe('index', () => {
 
   it('exports reader-layer values', () => {
     expect(MudParserError).toBeTypeOf('function');
+    expect(ParseError).toBeTypeOf('function');
     expect(MudReader).toBeTypeOf('function');
     expect(bitvectorToAsciiFlags).toBeTypeOf('function');
     expect(parseAsciiFlag).toBeTypeOf('function');
     expect(readMudNumber).toBeTypeOf('function');
+  });
+
+  it('exports zone parser values', () => {
+    expect(MudRecord).toBeTypeOf('function');
+    expect(ZoneRecord).toBeTypeOf('function');
+    expect(parseZone).toBeTypeOf('function');
+    expect(parseZoneFile).toBeTypeOf('function');
   });
 
   it('exports documented record type values', () => {

@@ -1,8 +1,12 @@
 import { MudParserError } from './errors.js';
 import type { MudInput, SourceSpan } from './types.js';
 
+/** Options used when constructing a `MudReader`. */
 export interface ReaderOptions {
+  /** Buffer encoding used when input is a Buffer. Defaults to `utf8`. */
   encoding?: BufferEncoding;
+
+  /** Source label attached to reader-generated errors. */
   sourceName?: string;
 }
 
@@ -21,7 +25,14 @@ interface ReaderState {
 
 const readerStates = new WeakMap<MudReader, ReaderState>();
 
+/** Cursor-style reader for CircleMUD/tbaMUD source text. */
 export class MudReader {
+  /**
+   * Creates a reader over an in-memory source string or Buffer.
+   *
+   * @param input - Source text or Buffer to read from.
+   * @param options - Reader options controlling encoding and source metadata.
+   */
   constructor(input: MudInput, options: ReaderOptions = {}) {
     const state: ReaderState = {
       text: Buffer.isBuffer(input) ? input.toString(options.encoding ?? 'utf8') : input,
@@ -42,23 +53,50 @@ export class MudReader {
     readerStates.set(this, state);
   }
 
+  /**
+   * Returns the source label attached to this reader, if one was provided.
+   *
+   * @returns Source label or `undefined`.
+   */
   get sourceName(): string | undefined {
     return getState(this).sourceName;
   }
 
+  /**
+   * Returns the current one-based line number.
+   *
+   * @returns Current reader line.
+   */
   get line(): number {
     return getState(this).line;
   }
 
+  /**
+   * Returns the current one-based column number.
+   *
+   * @returns Current reader column.
+   */
   get column(): number {
     return getState(this).column;
   }
 
+  /**
+   * Indicates whether the reader has consumed all input and has no pushed-back character.
+   *
+   * @returns `true` when no more characters are available.
+   */
   get eof(): boolean {
     const state = getState(this);
     return state.pushback === null && state.position >= state.text.length;
   }
 
+  /**
+   * Reads one physical line without the line terminator.
+   *
+   * Supports LF, CRLF, and CR line endings while normalizing the returned line to omit terminators.
+   *
+   * @returns The next line, or `null` at EOF before any characters are read.
+   */
   readLine(): string | null {
     if (this.eof) {
       return null;
@@ -89,6 +127,15 @@ export class MudReader {
     }
   }
 
+  /**
+   * Reads the next non-comment, non-blank line.
+   *
+   * Lines beginning with `*` and lines that are empty after MUD whitespace trimming are skipped.
+   *
+   * @param context - Optional context appended to error messages.
+   * @returns The next required content line.
+   * @throws MudParserError if EOF is reached before a content line is found.
+   */
   requireLine(context?: string): string {
     for (;;) {
       const line = this.readLine();
@@ -104,6 +151,12 @@ export class MudReader {
     }
   }
 
+  /**
+   * Reads the next non-MUD-whitespace character.
+   *
+   * @returns The next non-space character.
+   * @throws MudParserError if EOF is reached before a non-space character is found.
+   */
   readLetter(): string {
     for (;;) {
       const char = readChar(this);
@@ -117,6 +170,15 @@ export class MudReader {
     }
   }
 
+  /**
+   * Pushes one character back so it will be returned by the next read operation.
+   *
+   * Only one character of pushback is supported, matching the parser's C helper usage.
+   *
+   * @param char - Single character to push back.
+   * @returns Nothing.
+   * @throws MudParserError if `char` is not exactly one character or pushback is already occupied.
+   */
   unreadChar(char: string): void {
     const state = getState(this);
 
@@ -133,6 +195,16 @@ export class MudReader {
     state.lastWasCarriageReturn = state.previousWasCarriageReturn;
   }
 
+  /**
+   * Reads a tilde-terminated MUD string.
+   *
+   * Multi-line strings are joined with normalized `\n` line endings, and an empty string returns
+   * `null` to represent an explicitly absent source string.
+   *
+   * @param context - Optional context appended to error messages.
+   * @returns Decoded string content before the tilde, or `null` for an empty source string.
+   * @throws MudParserError if EOF is reached before a tilde terminator.
+   */
   readTildeString(context?: string): string | null {
     let value = '';
 
@@ -282,14 +354,39 @@ function parseAsciiFlagWithBase(value: string, baseOffset: number): number {
   return isNumeric ? parseNumericFlag(value) : flags;
 }
 
+/**
+ * Parses a CircleMUD ASCII or numeric bitvector string.
+ *
+ * Lowercase letters map to bit positions 0-25 and uppercase letters map to 26-51. Fully numeric
+ * input is parsed as base-10, matching `asciiflag_conv` in the C source.
+ *
+ * @param value - Source bitvector token.
+ * @returns Numeric bitvector value.
+ */
 export function parseAsciiFlag(value: string): number {
   return parseAsciiFlagWithBase(value, 0);
 }
 
+/**
+ * Parses an affect flag string using tbaMUD's shifted affect bit positions.
+ *
+ * In affect fields, `a` maps to bit 1 instead of bit 0, matching `asciiflag_conv_aff`.
+ *
+ * @param value - Source affect bitvector token.
+ * @returns Numeric affect bitvector value.
+ */
 export function parseAsciiAffectFlag(value: string): number {
   return parseAsciiFlagWithBase(value, 1);
 }
 
+/**
+ * Applies CircleMUD `parse_at` tab decoding.
+ *
+ * Single `@` characters become tabs, while paired `@@` sequences are preserved.
+ *
+ * @param value - Source string to decode.
+ * @returns String with unpaired `@` characters converted to tabs.
+ */
 export function parseAt(value: string): string {
   let parsed = '';
 
@@ -313,11 +410,30 @@ export function parseAt(value: string): string {
   return parsed;
 }
 
+/**
+ * Reads a tilde-terminated MUD string and applies `parseAt()` decoding.
+ *
+ * @param reader - Reader positioned at the start of a MUD string.
+ * @param context - Optional context appended to error messages.
+ * @returns Decoded string, or `null` for an explicitly empty source string.
+ * @throws MudParserError if EOF is reached before the tilde terminator.
+ */
 export function readMudString(reader: MudReader, context?: string): string | null {
   const value = reader.readTildeString(context);
   return value === null ? null : parseAt(value);
 }
 
+/**
+ * Reads a MUD integer using `fread_number`-style behavior.
+ *
+ * Leading MUD whitespace is skipped, signed integers are supported, and `|`-separated terms are
+ * summed recursively to match the C helper.
+ *
+ * @param reader - Reader positioned before a number.
+ * @param context - Optional context appended to error messages.
+ * @returns Parsed integer value.
+ * @throws MudParserError if a valid integer cannot be read.
+ */
 export function readMudNumber(reader: MudReader, context?: string): number {
   let char = readChar(reader);
 
@@ -358,6 +474,12 @@ export function readMudNumber(reader: MudReader, context?: string): number {
   return number;
 }
 
+/**
+ * Removes leading MUD whitespace from a string.
+ *
+ * @param value - String to trim.
+ * @returns `value` with leading MUD whitespace removed.
+ */
 export function skipMudSpaces(value: string): string {
   let index = 0;
 
