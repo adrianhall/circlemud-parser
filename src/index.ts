@@ -17,12 +17,19 @@ export {
   readMudString,
   skipMudSpaces,
 } from './reader.js';
-export { MudRecord, ZoneRecord } from './records.js';
+export { MudRecord, WorldRecord, ZoneRecord } from './records.js';
+export { parseWorld, parseWorldFile } from './parsers/world.js';
 export { parseZone, parseZoneFile } from './parsers/zone.js';
 export { RecordType } from './types.js';
 
 export type { MudParserErrorContext, ParseWarning } from './errors.js';
 export type { Logger, ParseOptions } from './options.js';
 export type { ReaderOptions } from './reader.js';
-export type { ZoneCommand, ZoneRecordInit } from './records.js';
+export type {
+  ExtraDescription,
+  RoomDirection,
+  WorldRecordInit,
+  ZoneCommand,
+  ZoneRecordInit,
+} from './records.js';
 export type { BitVector, BitVectorSet, FlagTable, MudInput, SourceSpan, Vnum } from './types.js';

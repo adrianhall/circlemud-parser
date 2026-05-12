@@ -7,9 +7,12 @@ import {
   ParseError,
   RecordType,
   VERSION,
+  WorldRecord,
   ZoneRecord,
   bitvectorToAsciiFlags,
   parseAsciiFlag,
+  parseWorld,
+  parseWorldFile,
   parseZone,
   parseZoneFile,
   readMudNumber,
@@ -31,7 +34,10 @@ describe('index', () => {
 
   it('exports zone parser values', () => {
     expect(MudRecord).toBeTypeOf('function');
+    expect(WorldRecord).toBeTypeOf('function');
     expect(ZoneRecord).toBeTypeOf('function');
+    expect(parseWorld).toBeTypeOf('function');
+    expect(parseWorldFile).toBeTypeOf('function');
     expect(parseZone).toBeTypeOf('function');
     expect(parseZoneFile).toBeTypeOf('function');
   });

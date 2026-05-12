@@ -1,0 +1,9 @@
+#3001
+Trigger Room~
+Room with triggers.
+~
+30 0 0 0 0 0
+S
+T 1200
+T 1201 extra text ignored by sscanf
+$~
