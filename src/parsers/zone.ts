@@ -10,28 +10,30 @@ import { readFileSync } from 'node:fs';
 
 import { ZONE_FLAGS } from '../flag-tables.js';
 import { bitvectorSetToAsciiFlags, resolveFlagSetNames } from '../flags.js';
-import { type Logger, type ParseOptions, silentLogger } from '../options.js';
+import { type ParseOptions } from '../options.js';
 import { MudReader, parseAsciiFlag, parseAt, skipMudSpaces } from '../reader.js';
-import { ZoneRecord } from '../records.js';
-import { ParseError, type MudParserErrorContext, type ParseWarning } from '../errors.js';
+import { ZoneRecord } from '../records/index.js';
 import { RecordType } from '../types.js';
-import type { ReaderOptions } from '../reader.js';
+import {
+  emitWarning,
+  fail,
+  normalizeParseOptions,
+  nullableString,
+  parseFourBitVectorTokens,
+  parseTokenInteger,
+  readContentLine,
+  readerOptionsFrom,
+  requireContentLine,
+  sourceForLine,
+  sourceForReader,
+  ZERO_FLAG_SET,
+  type ParserContext,
+  type SourceLine,
+} from './internal/index.js';
 import type { BitVectorSet, MudInput, SourceSpan, Vnum } from '../types.js';
-import type { ZoneCommand } from '../records.js';
+import type { ZoneCommand } from '../records/index.js';
 
-/** Normalized options used internally while parsing a zone file. */
-interface ZoneParserContext {
-  readonly strict: boolean;
-  readonly logger: Logger;
-  readonly sourceName?: string;
-  readonly onWarning?: (warning: ParseWarning) => void;
-}
-
-/** A non-comment source line and the line number where it started. */
-interface SourceLine {
-  readonly text: string;
-  readonly startLine: number;
-}
+type ZoneParserContext = ParserContext<RecordType.Zone>;
 
 /** Parsed numeric zone header fields before public flag-name resolution. */
 interface ZoneNumbers {
@@ -61,8 +63,6 @@ type ZoneCommandParseResult =
 
 /** Zone commands whose source form contains if_flag plus three numeric arguments. */
 const THREE_ARG_COMMANDS = new Set(['M', 'O', 'G', 'E', 'P', 'D', 'T']);
-const INT_TOKEN_PATTERN = /^[+-]?\d+$/;
-const ZERO_ZONE_FLAGS: BitVectorSet = [0, 0, 0, 0];
 
 /**
  * Reads and parses one `.zon` file from disk.
@@ -97,7 +97,7 @@ export function parseZoneFile(fileName: string, options: ParseOptions = {}): Zon
  * @throws ParseError if the input is not valid zone data.
  */
 export function parseZone(input: MudInput, options: ParseOptions = {}): ZoneRecord[] {
-  const context = normalizeParseOptions(options);
+  const context = normalizeParseOptions(options, RecordType.Zone);
   const reader = new MudReader(input, readerOptionsFrom(options));
   const header = parseZoneHeader(reader, context);
   const commands: ZoneCommand[] = [];
@@ -148,52 +148,6 @@ export function parseZone(input: MudInput, options: ParseOptions = {}): ZoneReco
 }
 
 /**
- * Applies parser defaults once so later helpers do not repeatedly check optional fields.
- *
- * @param options - Public parse options supplied by the caller.
- * @returns Normalized parser context with default strict mode and logger applied.
- */
-function normalizeParseOptions(options: ParseOptions): ZoneParserContext {
-  const context: {
-    strict: boolean;
-    logger: Logger;
-    sourceName?: string;
-    onWarning?: (warning: ParseWarning) => void;
-  } = {
-    strict: options.strict ?? true,
-    logger: options.logger ?? silentLogger,
-  };
-
-  if (options.sourceName !== undefined) {
-    context.sourceName = options.sourceName;
-  }
-  if (options.onWarning !== undefined) {
-    context.onWarning = options.onWarning;
-  }
-
-  return context;
-}
-
-/**
- * Extracts only the MudReader options from the broader parser options object.
- *
- * @param options - Public parse options supplied by the caller.
- * @returns Reader options containing only encoding and source-name fields.
- */
-function readerOptionsFrom(options: ParseOptions): ReaderOptions {
-  const readerOptions: ReaderOptions = {};
-
-  if (options.encoding !== undefined) {
-    readerOptions.encoding = options.encoding;
-  }
-  if (options.sourceName !== undefined) {
-    readerOptions.sourceName = options.sourceName;
-  }
-
-  return readerOptions;
-}
-
-/**
  * Parses the zone header and optional non-strict missing-builders fallback.
  *
  * The fallback mirrors tbaMUD's `zone_fix` behavior: when the numeric line is malformed and
@@ -214,7 +168,7 @@ function parseZoneHeader(reader: MudReader, context: ZoneParserContext): ZoneHea
     fail('Expected zone vnum header', context, sourceForLine(context, headerLine.startLine));
   }
 
-  const vnum = parseInteger(headerMatch[1]);
+  const vnum = parseTokenInteger(headerMatch[1]);
 
   if (vnum === null) {
     fail('Expected numeric zone vnum', context, sourceForLine(context, headerLine.startLine));
@@ -251,14 +205,12 @@ function parseZoneHeader(reader: MudReader, context: ZoneParserContext): ZoneHea
       );
     }
 
-    const warning = warningFor(
+    emitWarning(
       'Applied zone header fallback for missing builders line',
       context,
       sourceForLine(context, nameLine.startLine),
       vnum,
     );
-    context.logger.warn(warning.message);
-    context.onWarning?.(warning);
 
     numbers = fallbackNumbers;
     builders = 'None.';
@@ -315,12 +267,12 @@ function parseZoneNumbers(line: string, allowExtraOldFields: boolean): ZoneNumbe
   const tokens = line.trim().split(/\s+/).filter(Boolean);
 
   if (tokens.length >= 10) {
-    const bottom = parseInteger(tokens[0]);
-    const top = parseInteger(tokens[1]);
-    const lifespan = parseInteger(tokens[2]);
-    const resetMode = parseInteger(tokens[3]);
-    const minLevel = parseInteger(tokens[8]);
-    const maxLevel = parseInteger(tokens[9]);
+    const bottom = parseTokenInteger(tokens[0]);
+    const top = parseTokenInteger(tokens[1]);
+    const lifespan = parseTokenInteger(tokens[2]);
+    const resetMode = parseTokenInteger(tokens[3]);
+    const minLevel = parseTokenInteger(tokens[8]);
+    const maxLevel = parseTokenInteger(tokens[9]);
 
     if (
       bottom === null ||
@@ -333,7 +285,13 @@ function parseZoneNumbers(line: string, allowExtraOldFields: boolean): ZoneNumbe
       return null;
     }
 
-    const zoneFlagsSet = parseZoneFlagSet(tokens[4], tokens[5], tokens[6], tokens[7]);
+    const zoneFlagsSet = parseFourBitVectorTokens(
+      tokens[4],
+      tokens[5],
+      tokens[6],
+      tokens[7],
+      parseAsciiFlag,
+    );
 
     if (zoneFlagsSet === null) {
       return null;
@@ -351,10 +309,10 @@ function parseZoneNumbers(line: string, allowExtraOldFields: boolean): ZoneNumbe
   }
 
   if (tokens.length === 4 || (allowExtraOldFields && tokens.length >= 4)) {
-    const bottom = parseInteger(tokens[0]);
-    const top = parseInteger(tokens[1]);
-    const lifespan = parseInteger(tokens[2]);
-    const resetMode = parseInteger(tokens[3]);
+    const bottom = parseTokenInteger(tokens[0]);
+    const top = parseTokenInteger(tokens[1]);
+    const lifespan = parseTokenInteger(tokens[2]);
+    const resetMode = parseTokenInteger(tokens[3]);
 
     if (bottom === null || top === null || lifespan === null || resetMode === null) {
       return null;
@@ -365,50 +323,13 @@ function parseZoneNumbers(line: string, allowExtraOldFields: boolean): ZoneNumbe
       top,
       lifespan,
       resetMode,
-      zoneFlagsSet: ZERO_ZONE_FLAGS,
+      zoneFlagsSet: ZERO_FLAG_SET,
       minLevel: null,
       maxLevel: null,
     };
   }
 
   return null;
-}
-
-/**
- * Converts the four zone flag tokens into the internal bitvector set.
- *
- * @param first - First zone flag token.
- * @param second - Second zone flag token.
- * @param third - Third zone flag token.
- * @param fourth - Fourth zone flag token.
- * @returns A four-element bitvector set, or `null` when any token is invalid.
- */
-function parseZoneFlagSet(
-  first: string | undefined,
-  second: string | undefined,
-  third: string | undefined,
-  fourth: string | undefined,
-): BitVectorSet | null {
-  /** Returns a defined bitvector value for tuple construction under noUncheckedIndexedAccess. */
-  /* v8 ignore next -- @preserve fallback is unreachable because four validated tokens produce four numeric values. */
-  const valueOrDefault = (v?: number) => v ?? 0;
-
-  /* v8 ignore next -- @preserve unreachable through parseZoneNumbers(), which only calls this with four tokens. */
-  if (first === undefined || second === undefined || third === undefined || fourth === undefined) {
-    return null;
-  }
-
-  const values = [first, second, third, fourth].map((value) => parseAsciiFlag(value));
-  if (values.some((value) => !Number.isInteger(value) || value < 0)) {
-    return null;
-  }
-
-  return [
-    valueOrDefault(values[0]),
-    valueOrDefault(values[1]),
-    valueOrDefault(values[2]),
-    valueOrDefault(values[3]),
-  ];
 }
 
 /**
@@ -463,9 +384,7 @@ function parseZoneCommandLine(
     };
   }
 
-  const warning = warningFor(`Skipping unknown zone command '${command}'`, context, source, vnum);
-  context.logger.warn(warning.message);
-  context.onWarning?.(warning);
+  emitWarning(`Skipping unknown zone command '${command}'`, context, source, vnum);
   return { kind: 'skip' };
 }
 
@@ -504,10 +423,10 @@ function parseZoneVariableCommand(
     );
   }
 
-  const ifFlag = parseInteger(match[1]);
-  const firstArg = parseInteger(match[2]);
-  const secondArg = parseInteger(match[3]);
-  const thirdArg = parseInteger(match[4]);
+  const ifFlag = parseTokenInteger(match[1]);
+  const firstArg = parseTokenInteger(match[2]);
+  const secondArg = parseTokenInteger(match[3]);
+  const thirdArg = parseTokenInteger(match[4]);
   const firstStringArg = match[5];
   const secondStringArg = match[6];
 
@@ -566,7 +485,7 @@ function parseCommandIntegers(
 
   for (let index = 0; index < count; index += 1) {
     const token = tokens[index];
-    const value = parseInteger(token);
+    const value = parseTokenInteger(token);
 
     if (value === null) {
       fail(
@@ -645,59 +564,6 @@ function extractCommandComment(text: string): { readonly text: string; readonly 
 }
 
 /**
- * Reads the next non-empty, non-comment source line with its original line number.
- *
- * @param reader - Cursor over the zone input.
- * @returns The next content line, or `null` at EOF.
- */
-function readContentLine(reader: MudReader): SourceLine | null {
-  for (;;) {
-    const startLine = reader.line;
-    const text = reader.readLine();
-
-    if (text === null) {
-      return null;
-    }
-
-    const trimmed = skipMudSpaces(text);
-
-    if (trimmed.length === 0 || trimmed.startsWith('*')) {
-      continue;
-    }
-
-    return {
-      text,
-      startLine,
-    };
-  }
-}
-
-/**
- * Reads a content line or throws a parser error with the provided context message.
- *
- * @param reader - Cursor over the zone input.
- * @param context - Normalized parser context.
- * @param message - Error message to use if EOF is reached.
- * @param vnum - Optional zone VNUM used for error context.
- * @returns The next content line.
- * @throws ParseError if EOF is reached before a content line is found.
- */
-function requireContentLine(
-  reader: MudReader,
-  context: ZoneParserContext,
-  message: string,
-  vnum?: Vnum,
-): SourceLine {
-  const line = readContentLine(reader);
-
-  if (line === null) {
-    fail(message, context, sourceForReader(reader, context), vnum);
-  }
-
-  return line;
-}
-
-/**
  * Removes the first tilde terminator and any source text after it.
  *
  * @param value - Source text that may contain a tilde terminator.
@@ -709,16 +575,6 @@ function stripTilde(value: string): string {
 }
 
 /**
- * Converts explicitly absent tilde strings to the public `null` representation.
- *
- * @param value - Decoded source string.
- * @returns `null` for an empty string; otherwise the original string.
- */
-function nullableString(value: string): string | null {
-  return value.length === 0 ? null : value;
-}
-
-/**
  * Maps the tbaMUD `-1` level sentinel to the public `null` representation.
  *
  * @param value - Parsed level value.
@@ -726,112 +582,4 @@ function nullableString(value: string): string | null {
  */
 function nullableLevel(value: number): number | null {
   return value === -1 ? null : value;
-}
-
-/**
- * Parses a safe integer token, rejecting undefined, non-integers, and unsafe JS numbers.
- *
- * @param value - Token to parse.
- * @returns Parsed safe integer, or `null` when the token is absent or invalid.
- */
-function parseInteger(value: string | undefined): number | null {
-  if (value === undefined || !INT_TOKEN_PATTERN.test(value)) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isSafeInteger(parsed) ? parsed : null;
-}
-
-/**
- * Builds public source metadata from normalized parser context and line numbers.
- *
- * @param context - Normalized parser context.
- * @param startLine - Starting source line.
- * @param endLine - Optional ending source line.
- * @returns Source span suitable for public records, warnings, and errors.
- */
-function sourceForLine(
-  context: ZoneParserContext,
-  startLine: number,
-  endLine?: number,
-): SourceSpan {
-  const source: SourceSpan = { startLine };
-
-  if (context.sourceName !== undefined) {
-    source.fileName = context.sourceName;
-  }
-  if (endLine !== undefined) {
-    source.endLine = endLine;
-  }
-
-  return source;
-}
-
-/**
- * Builds source metadata at the reader's current cursor line.
- *
- * @param reader - Cursor over the zone input.
- * @param context - Normalized parser context.
- * @returns Source span using the reader's current line.
- */
-function sourceForReader(reader: MudReader, context: ZoneParserContext): SourceSpan {
-  return sourceForLine(context, reader.line);
-}
-
-/**
- * Creates a structured parse warning for zone-specific recoverable issues.
- *
- * @param message - Human-readable warning message.
- * @param context - Normalized parser context.
- * @param source - Source span for the warning.
- * @param vnum - Zone VNUM associated with the warning.
- * @returns Structured parse warning object.
- */
-function warningFor(
-  message: string,
-  context: ZoneParserContext,
-  source: SourceSpan,
-  vnum: Vnum,
-): ParseWarning {
-  const warning: ParseWarning = {
-    message,
-    source,
-    recordType: RecordType.Zone,
-    vnum,
-  };
-
-  /* v8 ignore next -- @preserve all warningFor() call sites pass sourceForLine(), which already adds fileName when present. */
-  if (context.sourceName !== undefined && warning.source?.fileName === undefined) {
-    warning.source = {
-      ...source,
-      fileName: context.sourceName,
-    };
-  }
-
-  return warning;
-}
-
-/**
- * Logs and throws a source-aware `ParseError`.
- *
- * @param message - Error message.
- * @param context - Normalized parser context.
- * @param source - Source span for the error.
- * @param vnum - Optional zone VNUM associated with the error.
- * @throws ParseError always.
- */
-function fail(message: string, context: ZoneParserContext, source: SourceSpan, vnum?: Vnum): never {
-  const errorContext: MudParserErrorContext = {
-    source,
-    recordType: RecordType.Zone,
-  };
-
-  if (vnum !== undefined) {
-    errorContext.vnum = vnum;
-  }
-
-  const error = new ParseError(message, errorContext);
-  context.logger.error(error.message, error);
-  throw error;
 }

@@ -13,38 +13,32 @@ import {
   resolveFlagNames,
   resolveFlagSetNames,
 } from '../flags.js';
-import { type Logger, type ParseOptions, silentLogger } from '../options.js';
-import { MudReader, parseAsciiFlag, readMudString, skipMudSpaces } from '../reader.js';
-import { WorldRecord } from '../records.js';
-import { ParseError, type MudParserErrorContext, type ParseWarning } from '../errors.js';
+import { type ParseOptions } from '../options.js';
+import { MudReader, parseAsciiFlag, skipMudSpaces } from '../reader.js';
+import { WorldRecord } from '../records/index.js';
 import { RecordType } from '../types.js';
-import type { ReaderOptions } from '../reader.js';
-import type { BitVector, BitVectorSet, MudInput, SourceSpan, Vnum } from '../types.js';
-import type { ExtraDescription, RoomDirection } from '../records.js';
+import {
+  emitWarning,
+  fail,
+  normalizeParseOptions,
+  parseFourBitVectorTokens,
+  parseRecordHeader,
+  parseTokenInteger,
+  parseTriggerAttachmentLine,
+  readContentLine,
+  readerOptionsFrom,
+  readSourceString,
+  requireContentLine,
+  sourceForLine,
+  sourceForReader,
+  splitKeywords,
+  type ParserContext,
+  type SourceLine,
+} from './internal/index.js';
+import type { BitVector, BitVectorSet, MudInput, Vnum } from '../types.js';
+import type { ExtraDescription, RoomDirection } from '../records/index.js';
 
-/** Normalized options used internally while parsing a world file. */
-interface WorldParserContext {
-  /** Whether to reject malformed source data immediately. */
-  readonly strict: boolean;
-
-  /** Logger used for parser diagnostics. */
-  readonly logger: Logger;
-
-  /** Optional source label attached to records, warnings, and errors. */
-  readonly sourceName?: string;
-
-  /** Optional structured warning callback. */
-  readonly onWarning?: (warning: ParseWarning) => void;
-}
-
-/** A non-comment source line and the line number where it started. */
-interface SourceLine {
-  /** Source text without the line terminator. */
-  readonly text: string;
-
-  /** One-based line number where the source text started. */
-  readonly startLine: number;
-}
+type WorldParserContext = ParserContext<RecordType.World>;
 
 /** Parsed room numeric fields before public flag-name resolution. */
 interface RoomNumbers {
@@ -88,7 +82,6 @@ interface DirectionNumbers {
   readonly toRoomVnum: Vnum;
 }
 
-const INT_TOKEN_PATTERN = /^[+-]?\d+$/;
 const RECORD_SENTINEL_VNUM = 99999;
 const SECT_INSIDE = 0;
 const NUM_ROOM_SECTORS = 10;
@@ -123,7 +116,7 @@ export function parseWorldFile(fileName: string, options: ParseOptions = {}): Wo
  * @throws ParseError if the input is not valid world data.
  */
 export function parseWorld(input: MudInput, options: ParseOptions = {}): WorldRecord[] {
-  const context = normalizeParseOptions(options);
+  const context = normalizeParseOptions(options, RecordType.World);
   const reader = new MudReader(input, readerOptionsFrom(options));
   const records: WorldRecord[] = [];
   let pendingLine: SourceLine | undefined;
@@ -146,7 +139,7 @@ export function parseWorld(input: MudInput, options: ParseOptions = {}): WorldRe
       return records;
     }
 
-    const vnum = parseWorldHeader(text, context, line);
+    const vnum = parseRecordHeader(text, context, line, 'world');
 
     if (vnum >= RECORD_SENTINEL_VNUM) {
       return records;
@@ -156,77 +149,6 @@ export function parseWorld(input: MudInput, options: ParseOptions = {}): WorldRe
     records.push(result.record);
     pendingLine = result.nextLine;
   }
-}
-
-/**
- * Applies parser defaults once so later helpers do not repeatedly check optional fields.
- *
- * @param options - Public parse options supplied by the caller.
- * @returns Normalized parser context with default strict mode and logger applied.
- */
-function normalizeParseOptions(options: ParseOptions): WorldParserContext {
-  const context: {
-    strict: boolean;
-    logger: Logger;
-    sourceName?: string;
-    onWarning?: (warning: ParseWarning) => void;
-  } = {
-    strict: options.strict ?? true,
-    logger: options.logger ?? silentLogger,
-  };
-
-  if (options.sourceName !== undefined) {
-    context.sourceName = options.sourceName;
-  }
-  if (options.onWarning !== undefined) {
-    context.onWarning = options.onWarning;
-  }
-
-  return context;
-}
-
-/**
- * Extracts only the MudReader options from the broader parser options object.
- *
- * @param options - Public parse options supplied by the caller.
- * @returns Reader options containing only encoding and source-name fields.
- */
-function readerOptionsFrom(options: ParseOptions): ReaderOptions {
-  const readerOptions: ReaderOptions = {};
-
-  if (options.encoding !== undefined) {
-    readerOptions.encoding = options.encoding;
-  }
-  if (options.sourceName !== undefined) {
-    readerOptions.sourceName = options.sourceName;
-  }
-
-  return readerOptions;
-}
-
-/**
- * Parses a `#<vnum>` world record header line.
- *
- * @param text - Trimmed source header text.
- * @param context - Normalized parser context.
- * @param line - Source line containing the header.
- * @returns Parsed room VNUM.
- * @throws ParseError if the line is not a valid world header.
- */
-function parseWorldHeader(text: string, context: WorldParserContext, line: SourceLine): Vnum {
-  const headerMatch = /^#([+-]?\d+)\s*$/.exec(text);
-
-  if (headerMatch === null) {
-    fail('Expected world record header', context, sourceForLine(context, line.startLine));
-  }
-
-  const vnum = parseInteger(headerMatch[1]);
-
-  if (vnum === null) {
-    fail('Expected numeric world vnum', context, sourceForLine(context, line.startLine));
-  }
-
-  return vnum;
 }
 
 /**
@@ -245,13 +167,13 @@ function parseWorldRecord(
   headerLine: SourceLine,
   vnum: Vnum,
 ): WorldRecordParseResult {
-  const name = readWorldString(reader, context, `room #${vnum} name`, vnum);
+  const name = readSourceString(reader, context, `room #${vnum} name`, vnum);
 
   if (name === null) {
     fail('Expected room name', context, sourceForReader(reader, context), vnum);
   }
 
-  const description = readWorldString(reader, context, `room #${vnum} description`, vnum);
+  const description = readSourceString(reader, context, `room #${vnum} description`, vnum);
   const numericLine = requireContentLine(
     reader,
     context,
@@ -339,35 +261,6 @@ function recordResult(
 }
 
 /**
- * Reads a MUD string and converts reader errors into world-specific `ParseError` instances.
- *
- * @param reader - Cursor over the world input.
- * @param context - Normalized parser context.
- * @param description - Human-readable source context for errors.
- * @param vnum - Room VNUM used for error context.
- * @returns Decoded MUD string, or `null` for an explicitly empty source string.
- * @throws ParseError if EOF is reached before the string terminator.
- */
-function readWorldString(
-  reader: MudReader,
-  context: WorldParserContext,
-  description: string,
-  vnum: Vnum,
-): string | null {
-  try {
-    return readMudString(reader, description);
-  } catch (error) {
-    fail(
-      `Expected tilde-terminated string while reading ${description}`,
-      context,
-      sourceForReader(reader, context),
-      vnum,
-      error,
-    );
-  }
-}
-
-/**
  * Parses either supported room numeric line shape.
  *
  * Old files provide three fields: source zone, one room flag token, and sector type. New tbaMUD
@@ -380,9 +273,9 @@ function parseRoomNumbers(line: string): RoomNumbers | null {
   const tokens = line.trim().split(/\s+/).filter(Boolean);
 
   if (tokens.length === 3) {
-    const sourceZone = parseInteger(tokens[0]);
-    const sectorType = parseInteger(tokens[2]);
-    const roomFlagsSet = parseRoomFlagSet(tokens[1], '0', '0', '0');
+    const sourceZone = parseTokenInteger(tokens[0]);
+    const sectorType = parseTokenInteger(tokens[2]);
+    const roomFlagsSet = parseFourBitVectorTokens(tokens[1], '0', '0', '0', parseAsciiFlag);
 
     if (sourceZone === null || sectorType === null || roomFlagsSet === null) {
       return null;
@@ -395,9 +288,15 @@ function parseRoomNumbers(line: string): RoomNumbers | null {
   }
 
   if (tokens.length === 6) {
-    const sourceZone = parseInteger(tokens[0]);
-    const sectorType = parseInteger(tokens[5]);
-    const roomFlagsSet = parseRoomFlagSet(tokens[1], tokens[2], tokens[3], tokens[4]);
+    const sourceZone = parseTokenInteger(tokens[0]);
+    const sectorType = parseTokenInteger(tokens[5]);
+    const roomFlagsSet = parseFourBitVectorTokens(
+      tokens[1],
+      tokens[2],
+      tokens[3],
+      tokens[4],
+      parseAsciiFlag,
+    );
 
     if (sourceZone === null || sectorType === null || roomFlagsSet === null) {
       return null;
@@ -410,43 +309,6 @@ function parseRoomNumbers(line: string): RoomNumbers | null {
   }
 
   return null;
-}
-
-/**
- * Converts four room flag tokens into the internal bitvector set.
- *
- * @param first - First room flag token.
- * @param second - Second room flag token.
- * @param third - Third room flag token.
- * @param fourth - Fourth room flag token.
- * @returns A four-element bitvector set, or `null` when any token is invalid.
- */
-function parseRoomFlagSet(
-  first: string | undefined,
-  second: string | undefined,
-  third: string | undefined,
-  fourth: string | undefined,
-): BitVectorSet | null {
-  /** Returns a defined bitvector value for tuple construction under noUncheckedIndexedAccess. */
-  /* v8 ignore next -- @preserve fallback is unreachable because four validated tokens produce four numeric values. */
-  const valueOrDefault = (v?: number) => v ?? 0;
-
-  /* v8 ignore next -- @preserve unreachable through parseRoomNumbers(), which only calls this with validated token counts. */
-  if (first === undefined || second === undefined || third === undefined || fourth === undefined) {
-    return null;
-  }
-
-  const values = [first, second, third, fourth].map((value) => parseAsciiFlag(value));
-  if (values.some((value) => !Number.isInteger(value) || value < 0)) {
-    return null;
-  }
-
-  return [
-    valueOrDefault(values[0]),
-    valueOrDefault(values[1]),
-    valueOrDefault(values[2]),
-    valueOrDefault(values[3]),
-  ];
 }
 
 /**
@@ -467,7 +329,7 @@ function parseRoomDirection(
   text: string,
   vnum: Vnum,
 ): RoomDirection {
-  const direction = parseInteger(text.slice(1).trim());
+  const direction = parseTokenInteger(text.slice(1).trim());
 
   if (direction === null || direction < 0 || direction >= NUM_OF_DIRS) {
     fail(
@@ -478,13 +340,13 @@ function parseRoomDirection(
     );
   }
 
-  const description = readWorldString(
+  const description = readSourceString(
     reader,
     context,
     `room #${vnum} direction D${direction} description`,
     vnum,
   );
-  const keywordString = readWorldString(
+  const keywordString = readSourceString(
     reader,
     context,
     `room #${vnum} direction D${direction} keywords`,
@@ -542,9 +404,9 @@ function parseDirectionNumbers(line: string): DirectionNumbers | null {
     return null;
   }
 
-  const doorType = parseInteger(tokens[0]);
-  const keyVnum = parseInteger(tokens[1]);
-  const toRoomVnum = parseInteger(tokens[2]);
+  const doorType = parseTokenInteger(tokens[0]);
+  const keyVnum = parseTokenInteger(tokens[1]);
+  const toRoomVnum = parseTokenInteger(tokens[2]);
 
   if (doorType === null || keyVnum === null || toRoomVnum === null) {
     return null;
@@ -654,8 +516,8 @@ function parseExtraDescription(
   context: WorldParserContext,
   vnum: Vnum,
 ): ExtraDescription {
-  const keywords = readWorldString(reader, context, `room #${vnum} extra keywords`, vnum);
-  const description = readWorldString(reader, context, `room #${vnum} extra description`, vnum);
+  const keywords = readSourceString(reader, context, `room #${vnum} extra keywords`, vnum);
+  const description = readSourceString(reader, context, `room #${vnum} extra description`, vnum);
 
   return {
     keywords: splitKeywords(keywords),
@@ -697,7 +559,7 @@ function parseRoomTriggers(
       return triggerBlockResult(triggerVnums, endLine, line);
     }
 
-    const triggerVnum = parseTriggerLine(text, context, line, vnum);
+    const triggerVnum = parseTriggerAttachmentLine(text, context, line, vnum, 'room');
 
     if (triggerVnum !== null) {
       triggerVnums.push(triggerVnum);
@@ -721,249 +583,4 @@ function triggerBlockResult(
   nextLine: SourceLine,
 ): TriggerBlockResult {
   return { triggerVnums, endLine, nextLine };
-}
-
-/**
- * Parses one `T <vnum>` DG trigger attachment line.
- *
- * Malformed trigger lines are warning-producing skips, matching tbaMUD's `dg_read_trigger()`.
- *
- * @param text - Trimmed trigger line text.
- * @param context - Normalized parser context.
- * @param line - Source line containing the trigger text.
- * @param vnum - Room VNUM used for warning context.
- * @returns Parsed trigger VNUM, or `null` when malformed.
- */
-function parseTriggerLine(
-  text: string,
-  context: WorldParserContext,
-  line: SourceLine,
-  vnum: Vnum,
-): Vnum | null {
-  const match = /^T\s+([+-]?\d+)/.exec(text);
-
-  if (match === null) {
-    emitWarning(
-      `Skipping malformed room trigger line '${text}'`,
-      context,
-      sourceForLine(context, line.startLine),
-      vnum,
-    );
-    return null;
-  }
-
-  const triggerVnum = parseInteger(match[1]);
-
-  if (triggerVnum === null) {
-    emitWarning(
-      `Skipping malformed room trigger line '${text}'`,
-      context,
-      sourceForLine(context, line.startLine),
-      vnum,
-    );
-    return null;
-  }
-
-  return triggerVnum;
-}
-
-/**
- * Splits a decoded MUD keyword string into public keyword array form.
- *
- * @param value - Decoded MUD keyword string, or `null` when explicitly empty.
- * @returns Whitespace-separated keyword tokens, or an empty array.
- */
-function splitKeywords(value: string | null): string[] {
-  return value === null ? [] : value.trim().split(/\s+/).filter(Boolean);
-}
-
-/**
- * Reads the next non-empty, non-comment source line with its original line number.
- *
- * @param reader - Cursor over the world input.
- * @returns The next content line, or `null` at EOF.
- */
-function readContentLine(reader: MudReader): SourceLine | null {
-  for (;;) {
-    const startLine = reader.line;
-    const text = reader.readLine();
-
-    if (text === null) {
-      return null;
-    }
-
-    const trimmed = skipMudSpaces(text);
-
-    if (trimmed.length === 0 || trimmed.startsWith('*')) {
-      continue;
-    }
-
-    return {
-      text,
-      startLine,
-    };
-  }
-}
-
-/**
- * Reads a content line or throws a parser error with the provided context message.
- *
- * @param reader - Cursor over the world input.
- * @param context - Normalized parser context.
- * @param message - Error message to use if EOF is reached.
- * @param vnum - Optional room VNUM used for error context.
- * @returns The next content line.
- * @throws ParseError if EOF is reached before a content line is found.
- */
-function requireContentLine(
-  reader: MudReader,
-  context: WorldParserContext,
-  message: string,
-  vnum?: Vnum,
-): SourceLine {
-  const line = readContentLine(reader);
-
-  if (line === null) {
-    fail(message, context, sourceForReader(reader, context), vnum);
-  }
-
-  return line;
-}
-
-/**
- * Parses a safe integer token, rejecting undefined, non-integers, and unsafe JS numbers.
- *
- * @param value - Token to parse.
- * @returns Parsed safe integer, or `null` when the token is absent or invalid.
- */
-function parseInteger(value: string | undefined): number | null {
-  if (value === undefined || !INT_TOKEN_PATTERN.test(value)) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isSafeInteger(parsed) ? parsed : null;
-}
-
-/**
- * Builds public source metadata from normalized parser context and line numbers.
- *
- * @param context - Normalized parser context.
- * @param startLine - Starting source line.
- * @param endLine - Optional ending source line.
- * @returns Source span suitable for public records, warnings, and errors.
- */
-function sourceForLine(
-  context: WorldParserContext,
-  startLine: number,
-  endLine?: number,
-): SourceSpan {
-  const source: SourceSpan = { startLine };
-
-  if (context.sourceName !== undefined) {
-    source.fileName = context.sourceName;
-  }
-  if (endLine !== undefined) {
-    source.endLine = endLine;
-  }
-
-  return source;
-}
-
-/**
- * Builds source metadata at the reader's current cursor line.
- *
- * @param reader - Cursor over the world input.
- * @param context - Normalized parser context.
- * @returns Source span using the reader's current line.
- */
-function sourceForReader(reader: MudReader, context: WorldParserContext): SourceSpan {
-  return sourceForLine(context, reader.line);
-}
-
-/**
- * Creates a structured parse warning for world-specific recoverable issues.
- *
- * @param message - Human-readable warning message.
- * @param context - Normalized parser context.
- * @param source - Source span for the warning.
- * @param vnum - Room VNUM associated with the warning.
- * @returns Structured parse warning object.
- */
-function warningFor(
-  message: string,
-  context: WorldParserContext,
-  source: SourceSpan,
-  vnum: Vnum,
-): ParseWarning {
-  const warning: ParseWarning = {
-    message,
-    source,
-    recordType: RecordType.World,
-    vnum,
-  };
-
-  /* v8 ignore next -- @preserve all warningFor() call sites pass sourceForLine(), which already adds fileName when present. */
-  if (context.sourceName !== undefined && warning.source?.fileName === undefined) {
-    warning.source = {
-      ...source,
-      fileName: context.sourceName,
-    };
-  }
-
-  return warning;
-}
-
-/**
- * Emits a recoverable world parser warning through both warning channels.
- *
- * @param message - Human-readable warning message.
- * @param context - Normalized parser context.
- * @param source - Source span for the warning.
- * @param vnum - Room VNUM associated with the warning.
- * @returns Nothing.
- */
-function emitWarning(
-  message: string,
-  context: WorldParserContext,
-  source: SourceSpan,
-  vnum: Vnum,
-): void {
-  const warning = warningFor(message, context, source, vnum);
-  context.logger.warn(warning.message);
-  context.onWarning?.(warning);
-}
-
-/**
- * Logs and throws a source-aware `ParseError`.
- *
- * @param message - Error message.
- * @param context - Normalized parser context.
- * @param source - Source span for the error.
- * @param vnum - Optional room VNUM associated with the error.
- * @param cause - Optional underlying error that caused the parse failure.
- * @throws ParseError always.
- */
-function fail(
-  message: string,
-  context: WorldParserContext,
-  source: SourceSpan,
-  vnum?: Vnum,
-  cause?: unknown,
-): never {
-  const errorContext: MudParserErrorContext = {
-    source,
-    recordType: RecordType.World,
-  };
-
-  if (vnum !== undefined) {
-    errorContext.vnum = vnum;
-  }
-  if (cause !== undefined) {
-    errorContext.cause = cause;
-  }
-
-  const error = new ParseError(message, errorContext);
-  context.logger.error(error.message, error);
-  throw error;
 }

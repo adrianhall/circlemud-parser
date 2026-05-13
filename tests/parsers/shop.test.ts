@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ParseError } from '../../src/errors.js';
 import { parseShop, parseShopFile } from '../../src/parsers/shop.js';
-import { ShopRecord } from '../../src/records.js';
+import { ShopRecord } from '../../src/records/index.js';
 import { RecordType } from '../../src/types.js';
 
 function fixturePath(name: string): string {

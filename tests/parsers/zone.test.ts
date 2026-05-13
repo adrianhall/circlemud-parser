@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ParseError } from '../../src/errors.js';
 import type { Logger } from '../../src/options.js';
 import { parseZone, parseZoneFile } from '../../src/parsers/zone.js';
-import { ZoneRecord } from '../../src/records.js';
+import { ZoneRecord } from '../../src/records/index.js';
 import { RecordType } from '../../src/types.js';
 
 function fixturePath(name: string): string {

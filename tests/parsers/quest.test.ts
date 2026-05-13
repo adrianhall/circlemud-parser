@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ParseError } from '../../src/errors.js';
 import { parseQuest, parseQuestFile } from '../../src/parsers/quest.js';
-import { QuestRecord } from '../../src/records.js';
+import { QuestRecord } from '../../src/records/index.js';
 import { RecordType } from '../../src/types.js';
 
 function fixturePath(name: string): string {

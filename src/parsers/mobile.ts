@@ -9,44 +9,41 @@ import { readFileSync } from 'node:fs';
 
 import { ACTION_FLAGS, AFFECTED_FLAGS } from '../flag-tables.js';
 import { bitvectorSetToAsciiFlags, resolveFlagSetNames } from '../flags.js';
-import { type Logger, type ParseOptions, silentLogger } from '../options.js';
-import {
-  MudReader,
-  parseAsciiAffectFlag,
-  parseAsciiFlag,
-  readMudString,
-  skipMudSpaces,
-} from '../reader.js';
-import { MobileRecord } from '../records.js';
-import { ParseError, type MudParserErrorContext, type ParseWarning } from '../errors.js';
+import { type ParseOptions } from '../options.js';
+import { MudReader, parseAsciiAffectFlag, parseAsciiFlag, skipMudSpaces } from '../reader.js';
+import { MobileRecord } from '../records/index.js';
 import { RecordType } from '../types.js';
-import type { ReaderOptions } from '../reader.js';
-import type { BitVectorSet, MudInput, SourceSpan, Vnum } from '../types.js';
-import type { DiceRoll, MobileEnhancedData, MobileRecordInit, MobileStats } from '../records.js';
+import {
+  emitWarning,
+  fail,
+  normalizeParseOptions,
+  parseBitVectorSet,
+  parseIntegerTokens,
+  parseLegacyBitVectorSet,
+  parseRecordHeader,
+  parseTokenInteger,
+  parseTriggerAttachmentLine,
+  readContentLine,
+  readerOptionsFrom,
+  readSourceString,
+  requireContentLine,
+  sourceForLine,
+  sourceForReader,
+  splitKeywords,
+  splitTokens,
+  valueAt,
+  type ParserContext,
+  type SourceLine,
+} from './internal/index.js';
+import type { BitVectorSet, MudInput, Vnum } from '../types.js';
+import type {
+  DiceRoll,
+  MobileEnhancedData,
+  MobileRecordInit,
+  MobileStats,
+} from '../records/index.js';
 
-/** Normalized options used internally while parsing a mobile file. */
-interface MobileParserContext {
-  /** Whether to reject legacy-compatible source data immediately. */
-  readonly strict: boolean;
-
-  /** Logger used for parser diagnostics. */
-  readonly logger: Logger;
-
-  /** Optional source label attached to records, warnings, and errors. */
-  readonly sourceName?: string;
-
-  /** Optional structured warning callback. */
-  readonly onWarning?: (warning: ParseWarning) => void;
-}
-
-/** A non-comment source line and the line number where it started. */
-interface SourceLine {
-  /** Source text without the line terminator. */
-  readonly text: string;
-
-  /** One-based line number where the source text started. */
-  readonly startLine: number;
-}
+type MobileParserContext = ParserContext<RecordType.Mobile>;
 
 /** Parsed mobile flag fields before public flag-name resolution. */
 interface MobileNumbers {
@@ -114,10 +111,8 @@ interface EspecDefinition {
   readonly max?: number;
 }
 
-const INT_TOKEN_PATTERN = /^[+-]?\d+$/;
 const DICE_TOKEN_PATTERN = /^([+-]?\d+)d([+-]?\d+)\+([+-]?\d+)$/;
 const RECORD_SENTINEL_VNUM = 99999;
-const ZERO_FLAG_SET: BitVectorSet = [0, 0, 0, 0];
 
 const ESPEC_DEFINITIONS: Readonly<Record<string, EspecDefinition>> = {
   barehandattack: { property: 'bareHandAttack', min: 0 },
@@ -163,7 +158,7 @@ export function parseMobileFile(fileName: string, options: ParseOptions = {}): M
  * @throws ParseError if the input is not valid mobile data.
  */
 export function parseMobile(input: MudInput, options: ParseOptions = {}): MobileRecord[] {
-  const context = normalizeParseOptions(options);
+  const context = normalizeParseOptions(options, RecordType.Mobile);
   const reader = new MudReader(input, readerOptionsFrom(options));
   const records: MobileRecord[] = [];
   let pendingLine: SourceLine | undefined;
@@ -186,7 +181,7 @@ export function parseMobile(input: MudInput, options: ParseOptions = {}): Mobile
       return records;
     }
 
-    const vnum = parseMobileHeader(text, context, line);
+    const vnum = parseRecordHeader(text, context, line, 'mobile');
 
     if (vnum >= RECORD_SENTINEL_VNUM) {
       return records;
@@ -196,77 +191,6 @@ export function parseMobile(input: MudInput, options: ParseOptions = {}): Mobile
     records.push(result.record);
     pendingLine = result.nextLine;
   }
-}
-
-/**
- * Applies parser defaults once so later helpers do not repeatedly check optional fields.
- *
- * @param options - Public parse options supplied by the caller.
- * @returns Normalized parser context with default strict mode and logger applied.
- */
-function normalizeParseOptions(options: ParseOptions): MobileParserContext {
-  const context: {
-    strict: boolean;
-    logger: Logger;
-    sourceName?: string;
-    onWarning?: (warning: ParseWarning) => void;
-  } = {
-    strict: options.strict ?? true,
-    logger: options.logger ?? silentLogger,
-  };
-
-  if (options.sourceName !== undefined) {
-    context.sourceName = options.sourceName;
-  }
-  if (options.onWarning !== undefined) {
-    context.onWarning = options.onWarning;
-  }
-
-  return context;
-}
-
-/**
- * Extracts only the MudReader options from the broader parser options object.
- *
- * @param options - Public parse options supplied by the caller.
- * @returns Reader options containing only encoding and source-name fields.
- */
-function readerOptionsFrom(options: ParseOptions): ReaderOptions {
-  const readerOptions: ReaderOptions = {};
-
-  if (options.encoding !== undefined) {
-    readerOptions.encoding = options.encoding;
-  }
-  if (options.sourceName !== undefined) {
-    readerOptions.sourceName = options.sourceName;
-  }
-
-  return readerOptions;
-}
-
-/**
- * Parses a `#<vnum>` mobile record header line.
- *
- * @param text - Trimmed source header text.
- * @param context - Normalized parser context.
- * @param line - Source line containing the header.
- * @returns Parsed mobile VNUM.
- * @throws ParseError if the line is not a valid mobile header.
- */
-function parseMobileHeader(text: string, context: MobileParserContext, line: SourceLine): Vnum {
-  const headerMatch = /^#([+-]?\d+)\s*$/.exec(text);
-
-  if (headerMatch === null) {
-    fail('Expected mobile record header', context, sourceForLine(context, line.startLine));
-  }
-
-  const vnum = parseInteger(headerMatch[1]);
-
-  if (vnum === null) {
-    fail('Expected numeric mobile vnum', context, sourceForLine(context, line.startLine));
-  }
-
-  return vnum;
 }
 
 /**
@@ -285,25 +209,25 @@ function parseMobileRecord(
   headerLine: SourceLine,
   vnum: Vnum,
 ): MobileRecordParseResult {
-  const aliasString = readMobileString(reader, context, `mobile #${vnum} aliases`, vnum);
+  const aliasString = readSourceString(reader, context, `mobile #${vnum} aliases`, vnum);
 
   if (aliasString === null) {
     fail('Expected mobile aliases', context, sourceForReader(reader, context), vnum);
   }
 
-  const shortDescription = readMobileString(
+  const shortDescription = readSourceString(
     reader,
     context,
     `mobile #${vnum} short description`,
     vnum,
   );
-  const longDescription = readMobileString(
+  const longDescription = readSourceString(
     reader,
     context,
     `mobile #${vnum} long description`,
     vnum,
   );
-  const description = readMobileString(reader, context, `mobile #${vnum} description`, vnum);
+  const description = readSourceString(reader, context, `mobile #${vnum} description`, vnum);
   const numericLine = requireContentLine(
     reader,
     context,
@@ -374,35 +298,6 @@ function recordResult(record: MobileRecord, nextLine?: SourceLine): MobileRecord
 }
 
 /**
- * Reads a MUD string and converts reader errors into mobile-specific `ParseError` instances.
- *
- * @param reader - Cursor over the mobile input.
- * @param context - Normalized parser context.
- * @param description - Human-readable source context for errors.
- * @param vnum - Mobile VNUM used for error context.
- * @returns Decoded MUD string, or `null` for an explicitly empty source string.
- * @throws ParseError if EOF is reached before the string terminator.
- */
-function readMobileString(
-  reader: MudReader,
-  context: MobileParserContext,
-  description: string,
-  vnum: Vnum,
-): string | null {
-  try {
-    return readMudString(reader, description);
-  } catch (error) {
-    fail(
-      `Expected tilde-terminated string while reading ${description}`,
-      context,
-      sourceForReader(reader, context),
-      vnum,
-      error,
-    );
-  }
-}
-
-/**
  * Parses the mobile action/affect flag line.
  *
  * @param lineText - Source line containing flag tokens, alignment, and type letter.
@@ -421,9 +316,9 @@ function parseMobileNumbers(
   const tokens = splitTokens(lineText);
 
   if (tokens.length === 10) {
-    const actionFlagsSet = parseFlagSet(tokens, 0, parseAsciiFlag);
-    const affectFlagsSet = parseFlagSet(tokens, 4, parseAsciiFlag);
-    const alignment = parseInteger(tokens[8]);
+    const actionFlagsSet = parseBitVectorSet(tokens, 0, parseAsciiFlag);
+    const affectFlagsSet = parseBitVectorSet(tokens, 4, parseAsciiFlag);
+    const alignment = parseTokenInteger(tokens[8]);
     const letter = parseTypeLetter(tokens[9]);
 
     if (
@@ -458,9 +353,9 @@ function parseMobileNumbers(
       );
     }
 
-    const actionFlagsSet = parseLegacyFlagSet(tokens[0], parseAsciiFlag);
-    const affectFlagsSet = parseLegacyFlagSet(tokens[1], parseAsciiAffectFlag);
-    const alignment = parseInteger(tokens[2]);
+    const actionFlagsSet = parseLegacyBitVectorSet(tokens[0], parseAsciiFlag);
+    const affectFlagsSet = parseLegacyBitVectorSet(tokens[1], parseAsciiAffectFlag);
+    const alignment = parseTokenInteger(tokens[2]);
     const letter = parseTypeLetter(tokens[3]);
 
     if (
@@ -498,79 +393,6 @@ function parseMobileNumbers(
     sourceForLine(context, line.startLine),
     vnum,
   );
-}
-
-/**
- * Parses one four-element flag vector set from a 10-field mobile flag line.
- *
- * @param tokens - Split source tokens.
- * @param startIndex - First flag token index.
- * @param parseFlag - Flag parser to use for each token.
- * @returns Parsed four-element bitvector set, or `null` when malformed.
- */
-function parseFlagSet(
-  tokens: readonly string[],
-  startIndex: number,
-  parseFlag: (value: string) => number,
-): BitVectorSet | null {
-  const values: number[] = [];
-
-  for (let offset = 0; offset < 4; offset += 1) {
-    const token = tokens[startIndex + offset];
-
-    /* v8 ignore next -- @preserve parseMobileNumbers() calls this only after validating a 10-token line. */
-    if (token === undefined) {
-      return null;
-    }
-
-    const value = parseFlag(token);
-
-    if (!Number.isSafeInteger(value) || value < 0) {
-      return null;
-    }
-
-    values.push(value);
-  }
-
-  return bitVectorSetFrom(values);
-}
-
-/**
- * Parses one legacy single-field flag value into a four-element flag set.
- *
- * @param token - Legacy flag token.
- * @param parseFlag - Flag parser to use.
- * @returns Parsed bitvector set with remaining fields zeroed, or `null` when malformed.
- */
-function parseLegacyFlagSet(
-  token: string | undefined,
-  parseFlag: (value: string) => number,
-): BitVectorSet | null {
-  /* v8 ignore next -- @preserve parseMobileNumbers() calls this only after validating legacy tokens. */
-  if (token === undefined) {
-    return null;
-  }
-
-  const value = parseFlag(token);
-
-  if (!Number.isSafeInteger(value) || value < 0) {
-    return null;
-  }
-
-  return [value, ZERO_FLAG_SET[1], ZERO_FLAG_SET[2], ZERO_FLAG_SET[3]];
-}
-
-/**
- * Builds a four-element bitvector set from a validated array.
- *
- * @param values - Validated four-value array.
- * @returns Four-element bitvector set.
- */
-function bitVectorSetFrom(values: readonly number[]): BitVectorSet {
-  /* v8 ignore next -- @preserve parseFlagSet() always supplies exactly four validated values. */
-  const valueAtIndex = (index: number): number => values[index] ?? 0;
-
-  return [valueAtIndex(0), valueAtIndex(1), valueAtIndex(2), valueAtIndex(3)];
 }
 
 /**
@@ -700,9 +522,9 @@ function parseMobileCombatLine(line: string): MobileCombatLine | null {
     return null;
   }
 
-  const level = parseInteger(tokens[0]);
-  const hitroll = parseInteger(tokens[1]);
-  const armorClass = parseInteger(tokens[2]);
+  const level = parseTokenInteger(tokens[0]);
+  const hitroll = parseTokenInteger(tokens[1]);
+  const armorClass = parseTokenInteger(tokens[2]);
   const hitDice = parseDiceRoll(tokens[3]);
   const damageDice = parseDiceRoll(tokens[4]);
 
@@ -743,9 +565,9 @@ function parseDiceRoll(token: string | undefined): DiceRoll | null {
     return null;
   }
 
-  const count = parseInteger(match[1]);
-  const sides = parseInteger(match[2]);
-  const bonus = parseInteger(match[3]);
+  const count = parseTokenInteger(match[1]);
+  const sides = parseTokenInteger(match[2]);
+  const bonus = parseTokenInteger(match[3]);
 
   if (count === null || sides === null || bonus === null) {
     return null;
@@ -847,7 +669,7 @@ function parseEspecLine(
   }
 
   const valueText = text.slice(colonIndex + 1).trim();
-  const value = parseInteger(valueText);
+  const value = parseTokenInteger(valueText);
 
   if (value === null) {
     handleInvalidEspec(
@@ -971,7 +793,7 @@ function parseTriggerSection(
       return triggerSectionResult(triggerVnums, endLine, line);
     }
 
-    const triggerVnum = parseTriggerLine(text, context, line, vnum);
+    const triggerVnum = parseTriggerAttachmentLine(text, context, line, vnum, 'mobile');
 
     if (triggerVnum !== null) {
       triggerVnums.push(triggerVnum);
@@ -999,293 +821,4 @@ function triggerSectionResult(
   }
 
   return { triggerVnums, endLine, nextLine };
-}
-
-/**
- * Parses one `T <vnum>` DG trigger attachment line.
- *
- * Malformed trigger lines are warning-producing skips, matching tbaMUD's `dg_read_trigger()`.
- *
- * @param text - Trimmed trigger line text.
- * @param context - Normalized parser context.
- * @param line - Source line containing the trigger text.
- * @param vnum - Mobile VNUM used for warning context.
- * @returns Parsed trigger VNUM, or `null` when malformed.
- */
-function parseTriggerLine(
-  text: string,
-  context: MobileParserContext,
-  line: SourceLine,
-  vnum: Vnum,
-): Vnum | null {
-  const match = /^T\s+([+-]?\d+)/.exec(text);
-
-  if (match === null) {
-    emitWarning(
-      `Skipping malformed mobile trigger line '${text}'`,
-      context,
-      sourceForLine(context, line.startLine),
-      vnum,
-    );
-    return null;
-  }
-
-  const triggerVnum = parseInteger(match[1]);
-
-  if (triggerVnum === null) {
-    emitWarning(
-      `Skipping malformed mobile trigger line '${text}'`,
-      context,
-      sourceForLine(context, line.startLine),
-      vnum,
-    );
-    return null;
-  }
-
-  return triggerVnum;
-}
-
-/**
- * Splits a decoded MUD keyword string into public keyword array form.
- *
- * @param value - Decoded MUD keyword string.
- * @returns Whitespace-separated keyword tokens.
- */
-function splitKeywords(value: string): string[] {
-  return value.trim().split(/\s+/).filter(Boolean);
-}
-
-/**
- * Splits a source line into whitespace-delimited tokens.
- *
- * @param line - Source line to split.
- * @returns Non-empty tokens.
- */
-function splitTokens(line: string): string[] {
-  return line.trim().split(/\s+/).filter(Boolean);
-}
-
-/**
- * Parses a source line containing only integer tokens.
- *
- * @param line - Source line to parse.
- * @returns Parsed integer values, or `null` when any token is invalid.
- */
-function parseIntegerTokens(line: string): number[] | null {
-  const values: number[] = [];
-
-  for (const token of splitTokens(line)) {
-    const value = parseInteger(token);
-
-    if (value === null) {
-      return null;
-    }
-
-    values.push(value);
-  }
-
-  return values;
-}
-
-/**
- * Reads the next non-empty, non-comment source line with its original line number.
- *
- * @param reader - Cursor over the mobile input.
- * @returns The next content line, or `null` at EOF.
- */
-function readContentLine(reader: MudReader): SourceLine | null {
-  for (;;) {
-    const startLine = reader.line;
-    const text = reader.readLine();
-
-    if (text === null) {
-      return null;
-    }
-
-    const trimmed = skipMudSpaces(text);
-
-    if (trimmed.length === 0 || trimmed.startsWith('*')) {
-      continue;
-    }
-
-    return {
-      text,
-      startLine,
-    };
-  }
-}
-
-/**
- * Reads a content line or throws a parser error with the provided context message.
- *
- * @param reader - Cursor over the mobile input.
- * @param context - Normalized parser context.
- * @param message - Error message to use if EOF is reached.
- * @param vnum - Optional mobile VNUM used for error context.
- * @returns The next content line.
- * @throws ParseError if EOF is reached before a content line is found.
- */
-function requireContentLine(
-  reader: MudReader,
-  context: MobileParserContext,
-  message: string,
-  vnum?: Vnum,
-): SourceLine {
-  const line = readContentLine(reader);
-
-  if (line === null) {
-    fail(message, context, sourceForReader(reader, context), vnum);
-  }
-
-  return line;
-}
-
-/**
- * Parses a safe integer token, rejecting undefined, non-integers, and unsafe JS numbers.
- *
- * @param value - Token to parse.
- * @returns Parsed safe integer, or `null` when the token is absent or invalid.
- */
-function parseInteger(value: string | undefined): number | null {
-  if (value === undefined || !INT_TOKEN_PATTERN.test(value)) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(value, 10);
-  return Number.isSafeInteger(parsed) ? parsed : null;
-}
-
-/**
- * Safely reads a value from a validated numeric array.
- *
- * @param values - Validated values.
- * @param index - Array index to read.
- * @returns Value at the index, or zero for defensive fallback.
- */
-function valueAt(values: readonly number[], index: number): number {
-  /* v8 ignore next -- @preserve callers validate token counts before reading indexed values. */
-  return values[index] ?? 0;
-}
-
-/**
- * Builds public source metadata from normalized parser context and line numbers.
- *
- * @param context - Normalized parser context.
- * @param startLine - Starting source line.
- * @param endLine - Optional ending source line.
- * @returns Source span suitable for public records, warnings, and errors.
- */
-function sourceForLine(
-  context: MobileParserContext,
-  startLine: number,
-  endLine?: number,
-): SourceSpan {
-  const source: SourceSpan = { startLine };
-
-  if (context.sourceName !== undefined) {
-    source.fileName = context.sourceName;
-  }
-  if (endLine !== undefined) {
-    source.endLine = endLine;
-  }
-
-  return source;
-}
-
-/**
- * Builds source metadata at the reader's current cursor line.
- *
- * @param reader - Cursor over the mobile input.
- * @param context - Normalized parser context.
- * @returns Source span using the reader's current line.
- */
-function sourceForReader(reader: MudReader, context: MobileParserContext): SourceSpan {
-  return sourceForLine(context, reader.line);
-}
-
-/**
- * Creates a structured parse warning for mobile-specific recoverable issues.
- *
- * @param message - Human-readable warning message.
- * @param context - Normalized parser context.
- * @param source - Source span for the warning.
- * @param vnum - Mobile VNUM associated with the warning.
- * @returns Structured parse warning object.
- */
-function warningFor(
-  message: string,
-  context: MobileParserContext,
-  source: SourceSpan,
-  vnum: Vnum,
-): ParseWarning {
-  const warning: ParseWarning = {
-    message,
-    source,
-    recordType: RecordType.Mobile,
-    vnum,
-  };
-
-  /* v8 ignore next -- @preserve sourceForLine() already adds fileName when present. */
-  if (context.sourceName !== undefined && warning.source?.fileName === undefined) {
-    warning.source = {
-      ...source,
-      fileName: context.sourceName,
-    };
-  }
-
-  return warning;
-}
-
-/**
- * Emits a recoverable mobile parser warning through both warning channels.
- *
- * @param message - Human-readable warning message.
- * @param context - Normalized parser context.
- * @param source - Source span for the warning.
- * @param vnum - Mobile VNUM associated with the warning.
- * @returns Nothing.
- */
-function emitWarning(
-  message: string,
-  context: MobileParserContext,
-  source: SourceSpan,
-  vnum: Vnum,
-): void {
-  const warning = warningFor(message, context, source, vnum);
-  context.logger.warn(warning.message);
-  context.onWarning?.(warning);
-}
-
-/**
- * Logs and throws a source-aware `ParseError`.
- *
- * @param message - Error message.
- * @param context - Normalized parser context.
- * @param source - Source span for the error.
- * @param vnum - Optional mobile VNUM associated with the error.
- * @param cause - Optional underlying error that caused the parse failure.
- * @throws ParseError always.
- */
-function fail(
-  message: string,
-  context: MobileParserContext,
-  source: SourceSpan,
-  vnum?: Vnum,
-  cause?: unknown,
-): never {
-  const errorContext: MudParserErrorContext = {
-    source,
-    recordType: RecordType.Mobile,
-  };
-
-  if (vnum !== undefined) {
-    errorContext.vnum = vnum;
-  }
-  if (cause !== undefined) {
-    errorContext.cause = cause;
-  }
-
-  const error = new ParseError(message, errorContext);
-  context.logger.error(error.message, error);
-  throw error;
 }

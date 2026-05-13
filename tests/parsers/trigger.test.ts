@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ParseError } from '../../src/errors.js';
 import { parseTrigger, parseTriggerFile } from '../../src/parsers/trigger.js';
-import { TriggerRecord } from '../../src/records.js';
+import { TriggerRecord } from '../../src/records/index.js';
 import { RecordType } from '../../src/types.js';
 
 function fixturePath(name: string): string {

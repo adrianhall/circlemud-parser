@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ParseError } from '../../src/errors.js';
 import type { Logger } from '../../src/options.js';
 import { parseMobile, parseMobileFile } from '../../src/parsers/mobile.js';
-import { MobileRecord } from '../../src/records.js';
+import { MobileRecord } from '../../src/records/index.js';
 import { RecordType } from '../../src/types.js';
 
 function fixturePath(name: string): string {

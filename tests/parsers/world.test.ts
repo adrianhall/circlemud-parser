@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ParseError } from '../../src/errors.js';
 import type { Logger } from '../../src/options.js';
 import { parseWorld, parseWorldFile } from '../../src/parsers/world.js';
-import { WorldRecord } from '../../src/records.js';
+import { WorldRecord } from '../../src/records/index.js';
 import { RecordType } from '../../src/types.js';
 
 function fixturePath(name: string): string {

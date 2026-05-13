@@ -23,10 +23,10 @@ interface ReaderState {
   pushback: string | null;
 }
 
-const readerStates = new WeakMap<MudReader, ReaderState>();
-
 /** Cursor-style reader for CircleMUD/tbaMUD source text. */
 export class MudReader {
+  #state: ReaderState;
+
   /**
    * Creates a reader over an in-memory source string or Buffer.
    *
@@ -34,7 +34,7 @@ export class MudReader {
    * @param options - Reader options controlling encoding and source metadata.
    */
   constructor(input: MudInput, options: ReaderOptions = {}) {
-    const state: ReaderState = {
+    this.#state = {
       text: Buffer.isBuffer(input) ? input.toString(options.encoding ?? 'utf8') : input,
       position: 0,
       line: 1,
@@ -47,10 +47,8 @@ export class MudReader {
     };
 
     if (options.sourceName !== undefined) {
-      Object.assign(state, { sourceName: options.sourceName });
+      Object.assign(this.#state, { sourceName: options.sourceName });
     }
-
-    readerStates.set(this, state);
   }
 
   /**
@@ -59,7 +57,7 @@ export class MudReader {
    * @returns Source label or `undefined`.
    */
   get sourceName(): string | undefined {
-    return getState(this).sourceName;
+    return this.#state.sourceName;
   }
 
   /**
@@ -68,7 +66,7 @@ export class MudReader {
    * @returns Current reader line.
    */
   get line(): number {
-    return getState(this).line;
+    return this.#state.line;
   }
 
   /**
@@ -77,7 +75,7 @@ export class MudReader {
    * @returns Current reader column.
    */
   get column(): number {
-    return getState(this).column;
+    return this.#state.column;
   }
 
   /**
@@ -86,8 +84,33 @@ export class MudReader {
    * @returns `true` when no more characters are available.
    */
   get eof(): boolean {
-    const state = getState(this);
+    const state = this.#state;
     return state.pushback === null && state.position >= state.text.length;
+  }
+
+  /**
+   * Reads one raw character from the input.
+   *
+   * @internal Used by low-level parser helpers that emulate C reader routines.
+   * @returns The next character, or `null` at EOF.
+   */
+  readChar(): string | null {
+    const state = this.#state;
+
+    if (state.pushback !== null) {
+      const char = state.pushback;
+      state.pushback = null;
+      advance(state, char);
+      return char;
+    }
+    if (state.position >= state.text.length) {
+      return null;
+    }
+
+    const char = state.text.charAt(state.position);
+    state.position += 1;
+    advance(state, char);
+    return char;
   }
 
   /**
@@ -105,7 +128,7 @@ export class MudReader {
     let line = '';
 
     for (;;) {
-      const char = readChar(this);
+      const char = this.readChar();
 
       if (char === null) {
         return line;
@@ -114,7 +137,7 @@ export class MudReader {
         return line;
       }
       if (char === '\r') {
-        const next = readChar(this);
+        const next = this.readChar();
 
         if (next !== null && next !== '\n') {
           this.unreadChar(next);
@@ -159,7 +182,7 @@ export class MudReader {
    */
   readLetter(): string {
     for (;;) {
-      const char = readChar(this);
+      const char = this.readChar();
 
       if (char === null) {
         throw readerError(this, 'Expected non-space character');
@@ -180,7 +203,7 @@ export class MudReader {
    * @throws MudParserError if `char` is not exactly one character or pushback is already occupied.
    */
   unreadChar(char: string): void {
-    const state = getState(this);
+    const state = this.#state;
 
     if (char.length !== 1) {
       throw readerError(this, `Expected exactly one character to unread, received ${char.length}`);
@@ -226,35 +249,6 @@ export class MudReader {
   }
 }
 
-function getState(reader: MudReader): ReaderState {
-  const state = readerStates.get(reader);
-
-  if (state === undefined) {
-    throw new TypeError('Invalid MudReader instance.');
-  }
-
-  return state;
-}
-
-function readChar(reader: MudReader): string | null {
-  const state = getState(reader);
-
-  if (state.pushback !== null) {
-    const char = state.pushback;
-    state.pushback = null;
-    advance(state, char);
-    return char;
-  }
-  if (state.position >= state.text.length) {
-    return null;
-  }
-
-  const char = state.text.charAt(state.position);
-  state.position += 1;
-  advance(state, char);
-  return char;
-}
-
 function advance(state: ReaderState, char: string): void {
   state.lastLine = state.line;
   state.lastColumn = state.column;
@@ -284,13 +278,12 @@ function readerError(reader: MudReader, message: string): MudParserError {
 }
 
 function sourceFor(reader: MudReader): SourceSpan {
-  const state = getState(reader);
   const source: SourceSpan = {
-    startLine: state.line,
+    startLine: reader.line,
   };
 
-  if (state.sourceName !== undefined) {
-    source.fileName = state.sourceName;
+  if (reader.sourceName !== undefined) {
+    source.fileName = reader.sourceName;
   }
 
   return source;
@@ -435,10 +428,10 @@ export function readMudString(reader: MudReader, context?: string): string | nul
  * @throws MudParserError if a valid integer cannot be read.
  */
 export function readMudNumber(reader: MudReader, context?: string): number {
-  let char = readChar(reader);
+  let char = reader.readChar();
 
   while (char !== null && isMudSpace(char)) {
-    char = readChar(reader);
+    char = reader.readChar();
   }
 
   if (char === null) {
@@ -449,7 +442,7 @@ export function readMudNumber(reader: MudReader, context?: string): number {
 
   if (char === '+' || char === '-') {
     sign = char === '-' ? -1 : 1;
-    char = readChar(reader);
+    char = reader.readChar();
   }
 
   if (char === null || !isAsciiDigit(char)) {
@@ -460,7 +453,7 @@ export function readMudNumber(reader: MudReader, context?: string): number {
 
   while (char !== null && isAsciiDigit(char)) {
     number = number * 10 + char.charCodeAt(0) - '0'.charCodeAt(0);
-    char = readChar(reader);
+    char = reader.readChar();
   }
 
   number *= sign;

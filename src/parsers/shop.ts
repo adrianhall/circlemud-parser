@@ -8,33 +8,31 @@
 import { readFileSync } from 'node:fs';
 
 import { ITEM_TYPES, SHOP_FLAGS, TRADE_FLAGS } from '../flag-tables.js';
-import { bitvectorToAsciiFlags, resolveFlagNames } from '../flags.js';
-import { type Logger, type ParseOptions, silentLogger } from '../options.js';
-import { MudReader, parseAsciiFlag, readMudString, skipMudSpaces } from '../reader.js';
-import { ShopRecord } from '../records.js';
-import { ParseError, type MudParserErrorContext } from '../errors.js';
+import { type ParseOptions } from '../options.js';
+import { MudReader, parseAsciiFlag, skipMudSpaces } from '../reader.js';
+import { ShopRecord } from '../records/index.js';
 import { RecordType } from '../types.js';
-import type { ReaderOptions } from '../reader.js';
-import type { BitVector, FlagTable, MudInput, SourceSpan, Vnum } from '../types.js';
-import type { ShopTradeType } from '../records.js';
+import {
+  fail,
+  normalizeParseOptions,
+  nullableString,
+  nullableVnum,
+  parseIntegerPrefix,
+  parseLeadingInteger,
+  parseRecordHeader,
+  readerOptionsFrom,
+  readSourceString,
+  requireContentLine,
+  resolveBitvector,
+  resolveOrdinalName,
+  sourceForLine,
+  type ParserContext,
+  type SourceLine,
+} from './internal/index.js';
+import type { BitVector, MudInput, Vnum } from '../types.js';
+import type { ShopTradeType } from '../records/index.js';
 
-/** Normalized options used internally while parsing a shop file. */
-interface ShopParserContext {
-  /** Logger used for parser diagnostics. */
-  readonly logger: Logger;
-
-  /** Optional source label attached to records and errors. */
-  readonly sourceName?: string;
-}
-
-/** A non-comment source line and the line number where it started. */
-interface SourceLine {
-  /** Source text without the line terminator. */
-  readonly text: string;
-
-  /** One-based line number where the source text started. */
-  readonly startLine: number;
-}
+type ShopParserContext = ParserContext<RecordType.Shop>;
 
 /** Parsed integer line plus source metadata. */
 interface IntegerLine {
@@ -63,20 +61,10 @@ interface BitvectorLine {
   readonly line: SourceLine;
 }
 
-/** Resolved bitvector names and canonical bits string. */
-interface ResolvedBitvector {
-  /** Resolved public flag names. */
-  readonly names: readonly string[];
-
-  /** Canonical ASCII flag representation. */
-  readonly bits: string;
-}
-
 const VERSION3_TAG = 'v3.0';
 const MAX_PROD = 5;
 const MAX_TRADE = 5;
 const OLD_FORMAT_ROOM_COUNT = 1;
-const INT_PREFIX_PATTERN = /^\s*([+-]?\d+)/;
 const FLOAT_PREFIX_PATTERN = /^\s*([+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[eE][+-]?\d+)?)/;
 
 /**
@@ -107,14 +95,14 @@ export function parseShopFile(fileName: string, options: ParseOptions = {}): Sho
  * @throws ParseError if the input is not valid shop data.
  */
 export function parseShop(input: MudInput, options: ParseOptions = {}): ShopRecord[] {
-  const context = normalizeParseOptions(options);
+  const context = normalizeParseOptions(options, RecordType.Shop);
   const reader = new MudReader(input, readerOptionsFrom(options));
   const records: ShopRecord[] = [];
   let newFormat = false;
 
   for (;;) {
     const startLine = reader.line;
-    const marker = readShopString(reader, context, 'shop header or file terminator');
+    const marker = readSourceString(reader, context, 'shop header or file terminator');
 
     if (marker === null) {
       fail(
@@ -130,7 +118,7 @@ export function parseShop(input: MudInput, options: ParseOptions = {}): ShopReco
       return records;
     }
     if (text.startsWith('#')) {
-      const vnum = parseShopHeader(text, context, sourceForLine(context, startLine));
+      const vnum = parseRecordHeader(text, context, { text, startLine }, 'shop');
       records.push(parseShopRecord(reader, context, startLine, vnum, newFormat));
     } else if (marker.includes(VERSION3_TAG)) {
       newFormat = true;
@@ -138,71 +126,6 @@ export function parseShop(input: MudInput, options: ParseOptions = {}): ShopReco
       context.logger.debug(`Skipping unrecognized shop file marker: ${marker}`);
     }
   }
-}
-
-/**
- * Applies parser defaults once so later helpers do not repeatedly check optional fields.
- *
- * @param options - Public parse options supplied by the caller.
- * @returns Normalized parser context with default logger applied.
- */
-function normalizeParseOptions(options: ParseOptions): ShopParserContext {
-  const context: {
-    logger: Logger;
-    sourceName?: string;
-  } = {
-    logger: options.logger ?? silentLogger,
-  };
-
-  if (options.sourceName !== undefined) {
-    context.sourceName = options.sourceName;
-  }
-
-  return context;
-}
-
-/**
- * Extracts only the MudReader options from the broader parser options object.
- *
- * @param options - Public parse options supplied by the caller.
- * @returns Reader options containing only encoding and source-name fields.
- */
-function readerOptionsFrom(options: ParseOptions): ReaderOptions {
-  const readerOptions: ReaderOptions = {};
-
-  if (options.encoding !== undefined) {
-    readerOptions.encoding = options.encoding;
-  }
-  if (options.sourceName !== undefined) {
-    readerOptions.sourceName = options.sourceName;
-  }
-
-  return readerOptions;
-}
-
-/**
- * Parses a `#<vnum>` shop record header string.
- *
- * @param text - Trimmed tilde-string content from the header.
- * @param context - Normalized parser context.
- * @param source - Source span for the header.
- * @returns Parsed shop VNUM.
- * @throws ParseError if the header is malformed.
- */
-function parseShopHeader(text: string, context: ShopParserContext, source: SourceSpan): Vnum {
-  const headerMatch = /^#([+-]?\d+)\s*$/.exec(text);
-
-  if (headerMatch === null) {
-    fail('Expected shop record header', context, source);
-  }
-
-  const vnum = parseLeadingInteger(headerMatch[1]);
-
-  if (vnum === null) {
-    fail('Expected numeric shop vnum', context, source);
-  }
-
-  return vnum;
 }
 
 /**
@@ -234,33 +157,33 @@ function parseShopRecord(
   const buyProfit = readFloatLine(reader, context, 'Expected shop buy profit', vnum);
   const sellProfit = readFloatLine(reader, context, 'Expected shop sell profit', vnum);
   const buyTypes = parseBuyTypeList(reader, context, newFormat, vnum);
-  const noSuchItemKeeper = readShopString(
+  const noSuchItemKeeper = readSourceString(
     reader,
     context,
     `shop #${vnum} no-such-item keeper message`,
     vnum,
   );
-  const noSuchItemPlayer = readShopString(
+  const noSuchItemPlayer = readSourceString(
     reader,
     context,
     `shop #${vnum} no-such-item player message`,
     vnum,
   );
-  const doNotBuy = readShopString(reader, context, `shop #${vnum} do-not-buy message`, vnum);
-  const missingCashKeeper = readShopString(
+  const doNotBuy = readSourceString(reader, context, `shop #${vnum} do-not-buy message`, vnum);
+  const missingCashKeeper = readSourceString(
     reader,
     context,
     `shop #${vnum} missing-cash keeper message`,
     vnum,
   );
-  const missingCashPlayer = readShopString(
+  const missingCashPlayer = readSourceString(
     reader,
     context,
     `shop #${vnum} missing-cash player message`,
     vnum,
   );
-  const messageBuy = readShopString(reader, context, `shop #${vnum} buy message`, vnum);
-  const messageSell = readShopString(reader, context, `shop #${vnum} sell message`, vnum);
+  const messageBuy = readSourceString(reader, context, `shop #${vnum} buy message`, vnum);
+  const messageSell = readSourceString(reader, context, `shop #${vnum} sell message`, vnum);
   const temper = readIntegerLine(reader, context, 'Expected shop temper', vnum);
   const shopBitvector = readBitvectorLine(reader, context, 'Expected shop flags bitvector', vnum);
   const keeper = readIntegerLine(reader, context, 'Expected shop keeper vnum', vnum);
@@ -325,35 +248,6 @@ function parseShopRecord(
     close2: close2.value,
     source: sourceForLine(context, startLine, close2.line.startLine),
   });
-}
-
-/**
- * Reads a tilde-terminated shop string and converts reader errors into shop-specific parse errors.
- *
- * @param reader - Cursor over the shop input.
- * @param context - Normalized parser context.
- * @param description - Human-readable source context for errors.
- * @param vnum - Optional shop VNUM used for error context.
- * @returns Decoded MUD string, or `null` for an explicitly empty source string.
- * @throws ParseError if EOF is reached before the string terminator.
- */
-function readShopString(
-  reader: MudReader,
-  context: ShopParserContext,
-  description: string,
-  vnum?: Vnum,
-): string | null {
-  try {
-    return readMudString(reader, description);
-  } catch (error) {
-    fail(
-      `Expected tilde-terminated string while reading ${description}`,
-      context,
-      sourceForReader(reader, context),
-      vnum,
-      error,
-    );
-  }
 }
 
 /**
@@ -590,93 +484,6 @@ function readBitvectorLine(
 }
 
 /**
- * Resolves bitvector public names and canonical ASCII bits with source-aware errors.
- *
- * @param value - Parsed bitvector value.
- * @param table - Flag table used for name resolution.
- * @param context - Normalized parser context.
- * @param line - Source line metadata.
- * @param vnum - Shop VNUM used for error context.
- * @param description - Human-readable field description for errors.
- * @returns Resolved bitvector names and bits.
- */
-function resolveBitvector(
-  value: BitVector,
-  table: FlagTable,
-  context: ShopParserContext,
-  line: SourceLine,
-  vnum: Vnum,
-  description: string,
-): ResolvedBitvector {
-  try {
-    return {
-      names: resolveFlagNames(value, table),
-      bits: bitvectorToAsciiFlags(value),
-    };
-  } catch (error) {
-    fail(
-      `Expected ${description} bitvector representable as ASCII flags`,
-      context,
-      sourceForLine(context, line.startLine),
-      vnum,
-      error,
-    );
-  }
-}
-
-/**
- * Reads the next non-empty, non-comment source line with its original line number.
- *
- * @param reader - Cursor over the shop input.
- * @returns The next content line, or `null` at EOF.
- */
-function readContentLine(reader: MudReader): SourceLine | null {
-  for (;;) {
-    const startLine = reader.line;
-    const text = reader.readLine();
-
-    if (text === null) {
-      return null;
-    }
-
-    const trimmed = skipMudSpaces(text);
-
-    if (trimmed.length === 0 || trimmed.startsWith('*')) {
-      continue;
-    }
-
-    return {
-      text,
-      startLine,
-    };
-  }
-}
-
-/**
- * Reads a content line or throws a parser error with the provided context message.
- *
- * @param reader - Cursor over the shop input.
- * @param context - Normalized parser context.
- * @param message - Error message to use if EOF is reached.
- * @param vnum - Shop VNUM used for error context.
- * @returns The next content line.
- */
-function requireContentLine(
-  reader: MudReader,
-  context: ShopParserContext,
-  message: string,
-  vnum: Vnum,
-): SourceLine {
-  const line = readContentLine(reader);
-
-  if (line === null) {
-    fail(message, context, sourceForReader(reader, context), vnum);
-  }
-
-  return line;
-}
-
-/**
  * Removes the trade-list comment introduced by `;`.
  *
  * @param value - Source line value.
@@ -685,55 +492,6 @@ function requireContentLine(
 function stripLineComment(value: string): string {
   const commentIndex = value.indexOf(';');
   return commentIndex === -1 ? value : value.slice(0, commentIndex);
-}
-
-/**
- * Parses and returns a leading safe integer.
- *
- * @param value - Source value.
- * @returns Parsed integer, or `null` when no safe integer prefix exists.
- */
-function parseLeadingInteger(value: string | undefined): number | null {
-  return parseIntegerPrefix(value)?.value ?? null;
-}
-
-/**
- * Parses a leading safe integer with its remaining text.
- *
- * @param value - Source value.
- * @returns Parsed integer and text after it, or `null` when no safe integer prefix exists.
- */
-function parseIntegerPrefix(
-  value: string | undefined,
-): { readonly value: number; readonly remainder: string } | null {
-  /* v8 ignore next -- @preserve parser call sites pass strings; undefined is accepted for regex capture typing under noUncheckedIndexedAccess. */
-  if (value === undefined) {
-    return null;
-  }
-
-  const match = INT_PREFIX_PATTERN.exec(value);
-
-  if (match === null) {
-    return null;
-  }
-
-  const token = match[1];
-
-  /* v8 ignore next -- @preserve INT_PREFIX_PATTERN always defines its only capture group when it matches. */
-  if (token === undefined) {
-    return null;
-  }
-
-  const parsed = Number.parseInt(token, 10);
-
-  if (!Number.isSafeInteger(parsed)) {
-    return null;
-  }
-
-  return {
-    value: parsed,
-    remainder: value.slice(match[0].length),
-  };
 }
 
 /**
@@ -799,106 +557,4 @@ function firstToken(value: string): string {
 
   /* v8 ignore next -- @preserve split() always returns a first element here; fallback satisfies noUncheckedIndexedAccess. */
   return token ?? '';
-}
-
-/**
- * Converts explicitly absent strings to the public `null` representation.
- *
- * @param value - Decoded source string.
- * @returns `null` for an empty string; otherwise the original string.
- */
-function nullableString(value: string): string | null {
-  return value.length === 0 ? null : value;
-}
-
-/**
- * Maps the tbaMUD `-1` VNUM sentinel to the public `null` representation.
- *
- * @param value - Parsed VNUM value.
- * @returns `null` for `-1`; otherwise the original VNUM.
- */
-function nullableVnum(value: Vnum): Vnum | null {
-  return value === -1 ? null : value;
-}
-
-/**
- * Resolves an ordinal table entry, preserving unknown values.
- *
- * @param value - Numeric ordinal value.
- * @param table - Ordinal name table.
- * @returns Table name or `UNKNOWN_<value>` fallback.
- */
-function resolveOrdinalName(value: number, table: FlagTable): string {
-  const name = table[value];
-  return name === undefined || name === '\n' || name === '\0' ? `UNKNOWN_${value}` : name;
-}
-
-/**
- * Builds public source metadata from normalized parser context and line numbers.
- *
- * @param context - Normalized parser context.
- * @param startLine - Starting source line.
- * @param endLine - Optional ending source line.
- * @returns Source span suitable for public records and errors.
- */
-function sourceForLine(
-  context: ShopParserContext,
-  startLine: number,
-  endLine?: number,
-): SourceSpan {
-  const source: SourceSpan = { startLine };
-
-  if (context.sourceName !== undefined) {
-    source.fileName = context.sourceName;
-  }
-  if (endLine !== undefined) {
-    source.endLine = endLine;
-  }
-
-  return source;
-}
-
-/**
- * Builds source metadata at the reader's current cursor line.
- *
- * @param reader - Cursor over the shop input.
- * @param context - Normalized parser context.
- * @returns Source span using the reader's current line.
- */
-function sourceForReader(reader: MudReader, context: ShopParserContext): SourceSpan {
-  return sourceForLine(context, reader.line);
-}
-
-/**
- * Logs and throws a source-aware `ParseError`.
- *
- * @param message - Error message.
- * @param context - Normalized parser context.
- * @param source - Source span for the error.
- * @param vnum - Optional shop VNUM associated with the error.
- * @param cause - Optional underlying error.
- * @throws ParseError always.
- */
-function fail(
-  message: string,
-  context: ShopParserContext,
-  source: SourceSpan,
-  vnum?: Vnum,
-  cause?: unknown,
-): never {
-  const errorContext: MudParserErrorContext = {
-    source,
-    recordType: RecordType.Shop,
-  };
-
-  if (vnum !== undefined) {
-    errorContext.vnum = vnum;
-  }
-  if (cause !== undefined) {
-    errorContext.cause = cause;
-  }
-
-  const error = new ParseError(message, errorContext);
-  context.logger.error(error.message, error);
-  throw error;
 }

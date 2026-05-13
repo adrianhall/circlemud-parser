@@ -26,7 +26,7 @@ export {
   TriggerRecord,
   WorldRecord,
   ZoneRecord,
-} from './records.js';
+} from './records/index.js';
 export { parseMobile, parseMobileFile } from './parsers/mobile.js';
 export { parseObject, parseObjectFile } from './parsers/object.js';
 export { parseQuest, parseQuestFile } from './parsers/quest.js';
@@ -55,5 +55,5 @@ export type {
   WorldRecordInit,
   ZoneCommand,
   ZoneRecordInit,
-} from './records.js';
+} from './records/index.js';
 export type { BitVector, BitVectorSet, FlagTable, MudInput, SourceSpan, Vnum } from './types.js';
