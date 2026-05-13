@@ -79,6 +79,82 @@ export const QUEST_TYPES: FlagTable = [
 /** Quest flag descriptions from `data/tbamud/src/quest.c` `aq_flags[]`. */
 export const AQ_FLAGS: FlagTable = ['REPEATABLE'];
 
+/** Trigger attach type descriptions from `data/tbamud/src/dg_scripts.h` attach type constants. */
+export const TRIGGER_ATTACH_TYPES: FlagTable = ['Mobile', 'Object', 'World'];
+
+/** Mob trigger type descriptions from `data/tbamud/src/constants.c` `trig_types[]`. */
+export const MOB_TRIGGER_TYPES: FlagTable = [
+  'Global',
+  'Random',
+  'Command',
+  'Speech',
+  'Act',
+  'Death',
+  'Greet',
+  'Greet-All',
+  'Entry',
+  'Receive',
+  'Fight',
+  'HitPrcnt',
+  'Bribe',
+  'Load',
+  'Memory',
+  'Cast',
+  'Leave',
+  'Door',
+  'UNUSED',
+  'Time',
+  'Damage',
+];
+
+/** Object trigger type descriptions from `data/tbamud/src/constants.c` `otrig_types[]`. */
+export const OBJ_TRIGGER_TYPES: FlagTable = [
+  'Global',
+  'Random',
+  'Command',
+  'UNUSED1',
+  'UNUSED2',
+  'Timer',
+  'Get',
+  'Drop',
+  'Give',
+  'Wear',
+  'UNUSED3',
+  'Remove',
+  'UNUSED4',
+  'Load',
+  'UNUSED5',
+  'Cast',
+  'Leave',
+  'UNUSED6',
+  'Consume',
+  'Time',
+];
+
+/** World trigger type descriptions from `data/tbamud/src/constants.c` `wtrig_types[]`. */
+export const WLD_TRIGGER_TYPES: FlagTable = [
+  'Global',
+  'Random',
+  'Command',
+  'Speech',
+  'UNUSED1',
+  'Zone Reset',
+  'Enter',
+  'Drop',
+  'UNUSED2',
+  'UNUSED3',
+  'UNUSED4',
+  'UNUSED5',
+  'UNUSED6',
+  'UNUSED7',
+  'UNUSED8',
+  'Cast',
+  'Leave',
+  'Door',
+  'Login',
+  'Time',
+];
+
 /**
  * Exit flag descriptions from `data/tbamud/src/constants.c` `exit_bits[]`.
  *

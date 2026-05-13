@@ -23,6 +23,7 @@ export {
   ObjectRecord,
   QuestRecord,
   ShopRecord,
+  TriggerRecord,
   WorldRecord,
   ZoneRecord,
 } from './records.js';
@@ -30,6 +31,7 @@ export { parseMobile, parseMobileFile } from './parsers/mobile.js';
 export { parseObject, parseObjectFile } from './parsers/object.js';
 export { parseQuest, parseQuestFile } from './parsers/quest.js';
 export { parseShop, parseShopFile } from './parsers/shop.js';
+export { parseTrigger, parseTriggerFile } from './parsers/trigger.js';
 export { parseWorld, parseWorldFile } from './parsers/world.js';
 export { parseZone, parseZoneFile } from './parsers/zone.js';
 export { RecordType } from './types.js';
@@ -49,6 +51,7 @@ export type {
   RoomDirection,
   ShopRecordInit,
   ShopTradeType,
+  TriggerRecordInit,
   WorldRecordInit,
   ZoneCommand,
   ZoneRecordInit,
