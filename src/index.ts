@@ -21,12 +21,14 @@ export {
   MobileRecord,
   MudRecord,
   ObjectRecord,
+  QuestRecord,
   ShopRecord,
   WorldRecord,
   ZoneRecord,
 } from './records.js';
 export { parseMobile, parseMobileFile } from './parsers/mobile.js';
 export { parseObject, parseObjectFile } from './parsers/object.js';
+export { parseQuest, parseQuestFile } from './parsers/quest.js';
 export { parseShop, parseShopFile } from './parsers/shop.js';
 export { parseWorld, parseWorldFile } from './parsers/world.js';
 export { parseZone, parseZoneFile } from './parsers/zone.js';
@@ -43,6 +45,7 @@ export type {
   MobileStats,
   ObjectAffect,
   ObjectRecordInit,
+  QuestRecordInit,
   RoomDirection,
   ShopRecordInit,
   ShopTradeType,

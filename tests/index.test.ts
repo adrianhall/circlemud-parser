@@ -7,6 +7,7 @@ import {
   MobileRecord,
   ObjectRecord,
   ParseError,
+  QuestRecord,
   RecordType,
   VERSION,
   WorldRecord,
@@ -17,6 +18,8 @@ import {
   parseMobileFile,
   parseObject,
   parseObjectFile,
+  parseQuest,
+  parseQuestFile,
   parseWorld,
   parseWorldFile,
   parseZone,
@@ -42,12 +45,15 @@ describe('index', () => {
     expect(MudRecord).toBeTypeOf('function');
     expect(MobileRecord).toBeTypeOf('function');
     expect(ObjectRecord).toBeTypeOf('function');
+    expect(QuestRecord).toBeTypeOf('function');
     expect(WorldRecord).toBeTypeOf('function');
     expect(ZoneRecord).toBeTypeOf('function');
     expect(parseMobile).toBeTypeOf('function');
     expect(parseMobileFile).toBeTypeOf('function');
     expect(parseObject).toBeTypeOf('function');
     expect(parseObjectFile).toBeTypeOf('function');
+    expect(parseQuest).toBeTypeOf('function');
+    expect(parseQuestFile).toBeTypeOf('function');
     expect(parseWorld).toBeTypeOf('function');
     expect(parseWorldFile).toBeTypeOf('function');
     expect(parseZone).toBeTypeOf('function');

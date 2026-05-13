@@ -65,6 +65,20 @@ export const TRADE_FLAGS: FlagTable = [
   'Warrior',
 ];
 
+/** Quest type descriptions from `data/tbamud/src/quest.c` `quest_types[]`. */
+export const QUEST_TYPES: FlagTable = [
+  'Object',
+  'Room',
+  'Find mob',
+  'Kill mob',
+  'Save mob',
+  'Return object',
+  'Clear room',
+];
+
+/** Quest flag descriptions from `data/tbamud/src/quest.c` `aq_flags[]`. */
+export const AQ_FLAGS: FlagTable = ['REPEATABLE'];
+
 /**
  * Exit flag descriptions from `data/tbamud/src/constants.c` `exit_bits[]`.
  *
