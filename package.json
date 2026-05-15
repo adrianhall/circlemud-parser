@@ -55,7 +55,10 @@
     "*.{ts,js,mjs,cjs}": "eslint --fix"
   },
   "dependencies": {
-    "commander": "^14.0.3"
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "smol-toml": "^1.6.1",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

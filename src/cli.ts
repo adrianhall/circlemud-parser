@@ -1,13 +1,4 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
+import { runCli } from './cli/run.js';
 
-import { VERSION } from './index.js';
-
-const program = new Command();
-
-program
-  .name('circlemud-parser')
-  .description('Parse CircleMUD/TbaMUD world data files into JSON')
-  .version(VERSION);
-
-program.parse();
+process.exit(runCli(process.argv.slice(2)));
