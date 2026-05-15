@@ -74,3 +74,30 @@ export class MudParserError extends Error {
 
 /** Error raised when source content cannot be parsed as the requested record type. */
 export class ParseError extends MudParserError {}
+
+/** Error raised when a parser entry point cannot determine a file's record type. */
+export class UnsupportedRecordTypeError extends MudParserError {
+  /** File name whose extension could not be mapped to a supported record type. */
+  readonly fileName: string;
+
+  /**
+   * Creates an unsupported-record-type error.
+   *
+   * @param fileName - File name that could not be mapped to a record type.
+   * @param messageOrContext - Optional custom message or parser error context.
+   * @param context - Optional parser error context when a custom message is provided.
+   */
+  constructor(
+    fileName: string,
+    messageOrContext?: string | MudParserErrorContext,
+    context: MudParserErrorContext = {},
+  ) {
+    const message =
+      typeof messageOrContext === 'string'
+        ? messageOrContext
+        : `Cannot infer record type from file name '${fileName}'`;
+
+    super(message, typeof messageOrContext === 'string' ? context : messageOrContext);
+    this.fileName = fileName;
+  }
+}

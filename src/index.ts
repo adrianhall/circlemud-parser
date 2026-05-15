@@ -1,7 +1,7 @@
 /** Package version string. */
 export const VERSION = '0.1.0';
 
-export { MudParserError, ParseError } from './errors.js';
+export { MudParserError, ParseError, UnsupportedRecordTypeError } from './errors.js';
 export {
   bitvectorSetToAsciiFlags,
   bitvectorToAsciiFlags,
@@ -29,6 +29,7 @@ export {
 } from './records/index.js';
 export { parseMobile, parseMobileFile } from './parsers/mobile.js';
 export { parseObject, parseObjectFile } from './parsers/object.js';
+export { inferRecordType, parseFile } from './parsers/file.js';
 export { parseQuest, parseQuestFile } from './parsers/quest.js';
 export { parseShop, parseShopFile } from './parsers/shop.js';
 export { parseTrigger, parseTriggerFile } from './parsers/trigger.js';
@@ -56,4 +57,13 @@ export type {
   ZoneCommand,
   ZoneRecordInit,
 } from './records/index.js';
-export type { BitVector, BitVectorSet, FlagTable, MudInput, SourceSpan, Vnum } from './types.js';
+export type {
+  BitVector,
+  BitVectorSet,
+  FlagTable,
+  MudInput,
+  MudRecordByType,
+  MudRecordOf,
+  SourceSpan,
+  Vnum,
+} from './types.js';

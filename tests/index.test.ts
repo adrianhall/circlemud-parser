@@ -10,11 +10,14 @@ import {
   QuestRecord,
   RecordType,
   TriggerRecord,
+  UnsupportedRecordTypeError,
   VERSION,
   WorldRecord,
   ZoneRecord,
   bitvectorToAsciiFlags,
+  inferRecordType,
   parseAsciiFlag,
+  parseFile,
   parseMobile,
   parseMobileFile,
   parseObject,
@@ -38,6 +41,7 @@ describe('index', () => {
   it('exports reader-layer values', () => {
     expect(MudParserError).toBeTypeOf('function');
     expect(ParseError).toBeTypeOf('function');
+    expect(UnsupportedRecordTypeError).toBeTypeOf('function');
     expect(MudReader).toBeTypeOf('function');
     expect(bitvectorToAsciiFlags).toBeTypeOf('function');
     expect(parseAsciiFlag).toBeTypeOf('function');
@@ -48,6 +52,8 @@ describe('index', () => {
     expect(MudRecord).toBeTypeOf('function');
     expect(MobileRecord).toBeTypeOf('function');
     expect(ObjectRecord).toBeTypeOf('function');
+    expect(inferRecordType).toBeTypeOf('function');
+    expect(parseFile).toBeTypeOf('function');
     expect(QuestRecord).toBeTypeOf('function');
     expect(TriggerRecord).toBeTypeOf('function');
     expect(WorldRecord).toBeTypeOf('function');

@@ -1,3 +1,13 @@
+import type {
+  MobileRecord,
+  ObjectRecord,
+  QuestRecord,
+  ShopRecord,
+  TriggerRecord,
+  WorldRecord,
+  ZoneRecord,
+} from './records/index.js';
+
 /** Virtual number used as the stable public identity for parsed MUD records. */
 export type Vnum = number;
 
@@ -48,3 +58,17 @@ export enum RecordType {
   /** DG trigger records from `.trg` files. */
   Trigger = 'trigger',
 }
+
+/** Maps each record type enum value to its concrete public record class. */
+export type MudRecordByType = {
+  [RecordType.Mobile]: MobileRecord;
+  [RecordType.Object]: ObjectRecord;
+  [RecordType.World]: WorldRecord;
+  [RecordType.Zone]: ZoneRecord;
+  [RecordType.Shop]: ShopRecord;
+  [RecordType.Quest]: QuestRecord;
+  [RecordType.Trigger]: TriggerRecord;
+};
+
+/** Concrete public record class for a specific record type. */
+export type MudRecordOf<T extends RecordType> = MudRecordByType[T];
