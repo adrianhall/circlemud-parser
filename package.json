@@ -40,6 +40,7 @@
     "check:format": "prettier --check .",
     "check:lint": "eslint .",
     "check:types": "tsc --noEmit",
+    "convert:tbamud": "tsx src/cli.ts -O data/json/tbamud --overwrite data/tbamud/lib/world",
     "dev": "tsx watch src/cli.ts",
     "fix": "run-s fix:*",
     "fix:format": "prettier --write .",
