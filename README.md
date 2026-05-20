@@ -31,12 +31,6 @@ type-checks, lints, formats, and tests correctly.
 Install from GitHub:
 
 ```sh
-pnpm add github:adrianhall/circlemud-parser
-```
-
-or:
-
-```sh
 npm install github:adrianhall/circlemud-parser
 ```
 
@@ -58,30 +52,30 @@ circlemud-parser --help
 Prerequisites:
 
 - Node.js 22 or newer
-- pnpm 10 or newer
+- npm 10 or newer
 
 Install dependencies:
 
 ```sh
-pnpm install
+npm install
 ```
 
 Build the package:
 
 ```sh
-pnpm build
+npm run build
 ```
 
 Run the CLI in development mode:
 
 ```sh
-pnpm dev -- --help
+npm run dev -- --help
 ```
 
 Run all checks:
 
 ```sh
-pnpm run check
+npm run check
 ```
 
 ## Pre-Commit Checks
@@ -92,7 +86,7 @@ The Husky pre-commit hook runs:
 - TypeScript with `tsc --noEmit`
 
 The hook is present in `.husky/pre-commit`. It will become active once this project is in a git
-repository and `pnpm install` has run.
+repository and `npm install` has run.
 
 ## Project Layout
 

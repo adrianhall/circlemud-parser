@@ -44,45 +44,45 @@ Follow `docs/LIBRARY.md` for public API names and behavior. Keep the high-level 
 Install dependencies:
 
 ```sh
-pnpm install
+npm install
 ```
 
 Run all checks, including coverage tests:
 
 ```sh
-pnpm run check
+npm run check
 ```
 
 Run automatic formatting and lint fixes:
 
 ```sh
-pnpm run fix
+npm run fix
 ```
 
 Run only the pre-commit checks without tests:
 
 ```sh
-pnpm run check-only
+npm run check-only
 ```
 
 Build the package:
 
 ```sh
-pnpm run build
+npm run build
 ```
 
 Run the CLI in development mode:
 
 ```sh
-pnpm run dev -- --help
+npm run dev -- --help
 ```
 
 ## Pre-Commit Behavior
 
 The Husky pre-commit hook at `.husky/pre-commit` runs:
 
-- `pnpm exec lint-staged`
-- `pnpm exec run-s check-only`
+- `npx lint-staged`
+- `npx run-s check-only`
 
 This means the hook formats and lint-fixes staged files through `lint-staged`, then runs format checking, ESLint, and TypeScript checks across the repository. It intentionally does not run tests.
 
@@ -92,7 +92,7 @@ Add focused unit tests for each parser layer as it is introduced. The reader and
 
 For parser work, prefer short inline fixtures first. Add fixture tests against `data/tbamud/lib/world` once each type-specific parser exists.
 
-Before finishing a coding task, run `pnpm run check`. If formatting or linting fails, run `pnpm run fix`, then rerun `pnpm run check`.
+Before finishing a coding task, run `npm run check`. If formatting or linting fails, run `npm run fix`, then rerun `npm run check`.
 
 ## Coding Notes
 

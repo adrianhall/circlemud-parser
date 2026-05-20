@@ -5,9 +5,9 @@
   "license": "MIT",
   "author": "Adrian Hall",
   "type": "module",
-  "packageManager": "pnpm@10.33.2",
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "npm": ">=10"
   },
   "repository": {
     "type": "git",
@@ -46,7 +46,7 @@
     "fix:format": "prettier --write .",
     "fix:lint": "eslint . --fix",
     "prepare": "husky || true && tsup",
-    "prepublishOnly": "pnpm run build",
+    "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest"

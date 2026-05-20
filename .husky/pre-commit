@@ -1,2 +1,2 @@
-pnpm exec lint-staged
-pnpm exec run-s check-only
+npx lint-staged
+npx run-s check-only
