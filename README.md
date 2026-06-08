@@ -13,22 +13,10 @@ primarily follow `data/tbamud/src/db.c` and the related loader/editor code.
 
 ## Status
 
-The parser implementation is not started yet. This scaffold verifies that the package builds,
-type-checks, lints, formats, and tests correctly.
+Both the CLI (which generated JSON files) and the library (which generates typed TypeScript objects)
+are fully implemented. 
 
-| File type           | Directory                   | Status  |
-| ------------------- | --------------------------- | ------- |
-| World rooms         | `data/tbamud/lib/world/wld` | Planned |
-| Mobile definitions  | `data/tbamud/lib/world/mob` | Planned |
-| Object definitions  | `data/tbamud/lib/world/obj` | Planned |
-| Zone reset commands | `data/tbamud/lib/world/zon` | Planned |
-| Shop definitions    | `data/tbamud/lib/world/shp` | Planned |
-| Quest definitions   | `data/tbamud/lib/world/qst` | Planned |
-| DG triggers         | `data/tbamud/lib/world/trg` | Planned |
-
-## Install
-
-Install from GitHub:
+## Install from GitHub:
 
 ```sh
 npm install github:adrianhall/circlemud-parser
