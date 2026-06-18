@@ -1,6 +1,6 @@
 {
   "name": "@adrianhall/circlemud-parser",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Parse CircleMUD/TbaMUD world data files into JSON.",
   "license": "MIT",
   "author": "Adrian Hall",
