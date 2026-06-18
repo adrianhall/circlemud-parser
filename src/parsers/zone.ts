@@ -159,7 +159,7 @@ export function parseZone(input: MudInput, options: ParseOptions = {}): ZoneReco
  *
  * The fallback mirrors tbaMUD's `zone_fix` behavior: when the numeric line is malformed and
  * `strict` is false, the previous line is reinterpreted as the numeric line, the builders text
- * becomes the zone name, and builders becomes `None.`.
+ * becomes the zone name, and builders becomes `null` (CircleMUD zones have no builders field).
  *
  * @param reader - Cursor over the zone input.
  * @param context - Normalized parser context.
@@ -209,7 +209,7 @@ function parseZoneHeader(reader: MudReader, context: ZoneParserContext): ZoneHea
     context.logger.debug(`Applied zone header fallback for missing builders line in zone #${vnum}`);
 
     numbers = fallbackNumbers;
-    builders = 'None.';
+    builders = null;
     name = parseAt(rawBuilders);
     firstCommandLine = numericLine;
   }

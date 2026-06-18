@@ -148,9 +148,9 @@ describe('parseZoneFile', () => {
     );
     const record = onlyZone(parseZoneFile(join(zoneDirectory, '30.zon')));
 
-    // CircleMUD zone: no builders line → fallback to 'None.'
+    // CircleMUD zone: no builders line → builders is null (no builders field in the format)
     expect(record.vnum).toBe(30);
-    expect(record.builders).toBe('None.');
+    expect(record.builders).toBeNull();
     expect(record.name).toBe('Northern Midgaard Main City');
     expect(record.bottom).toBe(3000);
     expect(record.top).toBe(3099);
@@ -260,7 +260,7 @@ describe('parseZone', () => {
     );
     expect(warn).not.toHaveBeenCalled();
     expect(warnings).toEqual([]);
-    expect(record.builders).toBe('None.');
+    expect(record.builders).toBeNull();
     expect(record.name).toBe('Fallback Zone');
     expect(record.bottom).toBe(300);
     expect(record.top).toBe(399);
@@ -275,7 +275,7 @@ describe('parseZone', () => {
     const strictFalseRecord = onlyZone(
       parseZoneFile(fixturePath('missing-builders.zon'), { strict: false }),
     );
-    expect(strictFalseRecord.builders).toBe('None.');
+    expect(strictFalseRecord.builders).toBeNull();
   });
 
   it('throws ParseError for malformed zone headers and numeric lines', () => {
@@ -357,7 +357,7 @@ describe('parseZone', () => {
       parseZone('#35\nFallback Zone~\n3500 3599 15 2\nG 1 3050 500   Scroll\nM 0 3000 1 3000\nS\n'),
     );
 
-    expect(record.builders).toBe('None.');
+    expect(record.builders).toBeNull();
     expect(record.name).toBe('Fallback Zone');
     expect(record.commands).toHaveLength(2);
     const gCmd = record.commands[0];
