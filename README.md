@@ -8,8 +8,8 @@ This project provides both a TypeScript library and a Node.js CLI for reading Ci
 TbaMUD world data files and converting them into structured JSON.
 
 The bundled TbaMUD source tree in `data/tbamud` is the reference implementation. When the
-documentation disagrees with the C source, the source code wins. The first parser work should
-primarily follow `data/tbamud/src/db.c` and the related loader/editor code.
+documentation disagrees with the C source, the source code wins; the parser follows
+`data/tbamud/src/db.c` and the related loader/editor code.
 
 ## Status
 
@@ -44,12 +44,35 @@ Review the [Library docs](docs/LIBRARY.md) for details on the library usage.
 
 ## CLI Usage
 
-Current CLI stub:
+The CLI parses a single data file, an index file, or a whole world directory and writes the
+results to JSON (default), YAML, or TOML.
 
 ```sh
+# Show version and help
 circlemud-parser --version
 circlemud-parser --help
+
+# Convert a single file (output written alongside the input)
+circlemud-parser path/to/30.wld
+
+# Convert an entire world directory to a separate output directory
+circlemud-parser -O ./out --overwrite path/to/lib/world
+
+# Choose an output format
+circlemud-parser -f yaml path/to/lib/world
 ```
+
+Common options:
+
+| Option                      | Description                                     |
+| --------------------------- | ----------------------------------------------- |
+| `-O, --output-directory`    | Write output to this directory                  |
+| `-f, --format <fmt>`        | Output format: `json` (default), `yaml`, `toml` |
+| `-l, --min-log-level <lvl>` | `debug`, `info`, `warn`, or `error`             |
+| `-q, --quiet`               | Suppress all log output                         |
+| `--overwrite`               | Overwrite existing output files                 |
+
+Run `circlemud-parser --help` for the full option list.
 
 ## Development
 
@@ -84,13 +107,10 @@ npm run check
 
 ## Pre-Commit Checks
 
-The Husky pre-commit hook runs:
+The Husky pre-commit hook at `.husky/pre-commit` runs:
 
 - Prettier and ESLint through `lint-staged`
-- TypeScript with `tsc --noEmit`
-
-The hook is present in `.husky/pre-commit`. It will become active once this project is in a git
-repository and `npm install` has run.
+- Format, lint, and TypeScript checks across the repository (`run-s check-only`)
 
 ## Project Layout
 
@@ -101,4 +121,6 @@ src/cli.ts         CLI entry point
 
 ## License
 
-The TypeScript parser project is licensed under MIT. The bundled TbaMUD source tree in `data/tbamud` retains its own license and copyright notices.
+The TypeScript parser project is licensed under MIT. The bundled TbaMUD source tree in
+`data/tbamud` and the CircleMUD 3.1 distribution in `data/circle-3.1` retain their own licenses and
+copyright notices.
