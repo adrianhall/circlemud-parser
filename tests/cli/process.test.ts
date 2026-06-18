@@ -355,3 +355,99 @@ describe('warningContext', () => {
     expect(result).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// SQL mode integration tests
+// ---------------------------------------------------------------------------
+
+describe('processWorkPlan — sql format', () => {
+  it('generates SQL migration files from a world directory', () => {
+    const outDir = mkdtempSync(join(tmpdir(), 'circlemud-sql-test-'));
+    try {
+      const deps = makeDeps();
+      const worldDir = fileURLToPath(new URL('../../data/tbamud/lib/world', import.meta.url));
+
+      // worldDir is referenced only to satisfy the URL; use a file plan with a real zone file
+      void worldDir;
+      // Use a file plan with a real zone file to keep the test fast
+      const zonePath = fixturePath('zone/new-format.zon');
+      const filePlan: WorkPlan = { kind: 'file', filePath: zonePath };
+
+      const options = makeOptions({
+        format: 'sql',
+        outputDirectory: outDir,
+        startNumber: 1,
+        emitCreateTables: '0001_schema.sql',
+        overwrite: true,
+        skipIfExists: false,
+      });
+
+      const exitCode = processWorkPlan(filePlan, options, deps);
+      expect(exitCode).toBe(0);
+
+      // Should have written the schema file
+      expect(existsSync(join(outDir, '0001_schema.sql'))).toBe(true);
+      // Should have written the zone data file (offset 0 from startNumber=1, so "1_zone_data.sql")
+      expect(existsSync(join(outDir, '1_zone_data.sql'))).toBe(true);
+
+      const schemaContent = readFileSync(join(outDir, '0001_schema.sql'), 'utf8');
+      expect(schemaContent).toContain('CREATE TABLE IF NOT EXISTS zones');
+
+      const dataContent = readFileSync(join(outDir, '1_zone_data.sql'), 'utf8');
+      expect(dataContent).toContain('INSERT OR IGNORE INTO zones');
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns 0 on empty work plan (no files)', () => {
+    const outDir = mkdtempSync(join(tmpdir(), 'circlemud-sql-empty-'));
+    try {
+      const deps = makeDeps();
+      // Index work with no files
+      const plan: WorkPlan = {
+        kind: 'index',
+        directory: outDir,
+        files: [],
+        subdirectory: 'zon',
+      };
+      const options = makeOptions({
+        format: 'sql',
+        outputDirectory: outDir,
+        startNumber: 9000,
+      });
+      const exitCode = processWorkPlan(plan, options, deps);
+      expect(exitCode).toBe(0);
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+
+  it('skips existing output files when skipIfExists is true', () => {
+    const outDir = mkdtempSync(join(tmpdir(), 'circlemud-sql-skip-'));
+    try {
+      const deps = makeDeps();
+      const zonePath = fixturePath('zone/new-format.zon');
+      const filePlan: WorkPlan = { kind: 'file', filePath: zonePath };
+
+      const options = makeOptions({
+        format: 'sql',
+        outputDirectory: outDir,
+        startNumber: 9000,
+        skipIfExists: true,
+        overwrite: false,
+      });
+
+      // Write a sentinel file at the expected output path
+      writeFileSync(join(outDir, '9000_zone_data.sql'), 'sentinel');
+
+      processWorkPlan(filePlan, options, deps);
+
+      // File should still contain the sentinel content
+      const content = readFileSync(join(outDir, '9000_zone_data.sql'), 'utf8');
+      expect(content).toBe('sentinel');
+    } finally {
+      rmSync(outDir, { recursive: true, force: true });
+    }
+  });
+});
