@@ -29,7 +29,11 @@ function loggerMock(): ReturnType<typeof vi.fn<() => void>> {
   return vi.fn((): void => {});
 }
 
-function testLogger(): { logger: Logger; warn: ReturnType<typeof loggerMock> } {
+function testLogger(): {
+  logger: Logger;
+  debug: ReturnType<typeof loggerMock>;
+  warn: ReturnType<typeof loggerMock>;
+} {
   const debug = loggerMock();
   const info = loggerMock();
   const warn = loggerMock();
@@ -42,6 +46,7 @@ function testLogger(): { logger: Logger; warn: ReturnType<typeof loggerMock> } {
       warn,
       error,
     },
+    debug,
     warn,
   };
 }
@@ -122,6 +127,47 @@ describe('parseZoneFile', () => {
     );
   });
 
+  it('parses bundled CircleMUD 3.1 zone files', () => {
+    const zoneDirectory = fileURLToPath(
+      new URL('../../data/circle-3.1/lib/world/zon/', import.meta.url),
+    );
+    const zoneFiles = readdirSync(zoneDirectory).filter((name) => name.endsWith('.zon'));
+
+    expect(zoneFiles.length).toBeGreaterThan(0);
+
+    for (const zoneFile of zoneFiles) {
+      const record = onlyZone(parseZoneFile(join(zoneDirectory, zoneFile)));
+      expect(record.vnum).toBeGreaterThanOrEqual(0);
+      expect(record.name.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('parses CircleMUD zone #30 with correct headerless fallback and G-command args', () => {
+    const zoneDirectory = fileURLToPath(
+      new URL('../../data/circle-3.1/lib/world/zon/', import.meta.url),
+    );
+    const record = onlyZone(parseZoneFile(join(zoneDirectory, '30.zon')));
+
+    // CircleMUD zone: no builders line → fallback to 'None.'
+    expect(record.vnum).toBe(30);
+    expect(record.builders).toBe('None.');
+    expect(record.name).toBe('Northern Midgaard Main City');
+    expect(record.bottom).toBe(3000);
+    expect(record.top).toBe(3099);
+    expect(record.lifespan).toBe(15);
+    expect(record.resetMode).toBe(2);
+
+    // G command uses 3 args (CircleMUD): [obj_vnum, max_in_world]
+    const gCmd = record.commands.find((c) => c.command === 'G');
+    expect(gCmd?.ifFlag).toBe(1);
+    expect(gCmd?.args).toEqual([3050, 500]);
+
+    // M command uses 4 args (consistent across both formats): [mob_vnum, max, room_vnum]
+    const mCmd = record.commands.find((c) => c.command === 'M');
+    expect(mCmd?.ifFlag).toBe(0);
+    expect(mCmd?.args).toEqual([3000, 1, 3033]);
+  });
+
   it('parses bundled tbaMUD zone files', () => {
     const zoneDirectory = fileURLToPath(
       new URL('../../data/tbamud/lib/world/zon/', import.meta.url),
@@ -193,14 +239,12 @@ describe('parseZone', () => {
     expect(record.commands[0]).toMatchObject({ command: 'M', args: [1, 1, 700] });
   });
 
-  it('applies the missing-builders fallback only when strict is false', () => {
-    expect(() => parseZoneFile(fixturePath('missing-builders.zon'))).toThrow(ParseError);
-
-    const { logger, warn } = testLogger();
+  it('applies the missing-builders fallback (CircleMUD format) automatically', () => {
+    // Now accepted in default strict mode — format is auto-detected, not gated by strict.
+    const { logger, debug, warn } = testLogger();
     const warnings: unknown[] = [];
     const record = onlyZone(
       parseZoneFile(fixturePath('missing-builders.zon'), {
-        strict: false,
         sourceName: 'missing-builders.zon',
         logger,
         onWarning: (warning) => {
@@ -209,15 +253,13 @@ describe('parseZone', () => {
       }),
     );
 
-    expect(warn).toHaveBeenCalledWith('Applied zone header fallback for missing builders line');
-    expect(warnings).toEqual([
-      {
-        message: 'Applied zone header fallback for missing builders line',
-        source: { fileName: 'missing-builders.zon', startLine: 3 },
-        recordType: RecordType.Zone,
-        vnum: 3,
-      },
-    ]);
+    // The missing builders line is the normal CircleMUD layout, so it is logged at debug level
+    // exactly once and is not surfaced as a structured warning.
+    expect(debug).toHaveBeenCalledWith(
+      'Applied zone header fallback for missing builders line in zone #3',
+    );
+    expect(warn).not.toHaveBeenCalled();
+    expect(warnings).toEqual([]);
     expect(record.builders).toBe('None.');
     expect(record.name).toBe('Fallback Zone');
     expect(record.bottom).toBe(300);
@@ -228,6 +270,12 @@ describe('parseZone', () => {
       args: [1, 1, 300],
       comment: 'a fallback mob',
     });
+
+    // Also accepted when strict is explicitly false.
+    const strictFalseRecord = onlyZone(
+      parseZoneFile(fixturePath('missing-builders.zon'), { strict: false }),
+    );
+    expect(strictFalseRecord.builders).toBe('None.');
   });
 
   it('throws ParseError for malformed zone headers and numeric lines', () => {
@@ -236,6 +284,7 @@ describe('parseZone', () => {
       ParseError,
     );
     expect(() => parseZone('#8\nBuilder~\nName~\n100 199 5\nS\n')).toThrow(ParseError);
+    expect(() => parseZone('#20\nBuilder~\nName~\n100 199 5\nS\n')).toThrow(ParseError);
     expect(() => parseZone('#20\nBuilder~\nName~\n100 199 5\nS\n', { strict: false })).toThrow(
       ParseError,
     );
@@ -261,5 +310,61 @@ describe('parseZone', () => {
     expect(() =>
       parseZone('#19\nBuilder~\nName~\n1900 1999 5 2\nV 0 1 2 9007199254740993 var value\nS\n'),
     ).toThrow(ParseError);
+  });
+
+  it('accepts CircleMUD three-argument G command', () => {
+    // CircleMUD: G <if_flag> <obj_vnum> <max_in_world>  (3 numbers total)
+    const record = onlyZone(
+      parseZone('#30\nBuilder~\nMidgaard~\n3000 3099 15 2\nG 1 3050 500\nS\n'),
+    );
+
+    expect(record.commands).toHaveLength(1);
+    const cmd = record.commands[0];
+    expect(cmd?.command).toBe('G');
+    expect(cmd?.ifFlag).toBe(1);
+    expect(cmd?.args).toEqual([3050, 500]);
+  });
+
+  it('accepts tbaMUD four-argument G command (extra arg3 preserved)', () => {
+    // tbaMUD: G <if_flag> <obj_vnum> <max_in_world> <arg3>  (4 numbers, arg3 unused at reset)
+    const record = onlyZone(
+      parseZone('#31\nBuilder~\nMidgaard~\n3100 3199 15 2\nG 1 3006 99 -1\nS\n'),
+    );
+
+    expect(record.commands).toHaveLength(1);
+    const cmd = record.commands[0];
+    expect(cmd?.command).toBe('G');
+    expect(cmd?.ifFlag).toBe(1);
+    expect(cmd?.args).toEqual([3006, 99, -1]);
+  });
+
+  it('rejects a G command with fewer than three numeric arguments', () => {
+    // Too few tokens.
+    expect(() => parseZone('#32\nBuilder~\nName~\n3200 3299 5 2\nG 1 3050\nS\n')).toThrow(
+      ParseError,
+    );
+    expect(() => parseZone('#33\nBuilder~\nName~\n3300 3399 5 2\nG 0\nS\n')).toThrow(ParseError);
+    // Tokens present but non-numeric mid-way (loop exits before accumulating 3 values).
+    expect(() => parseZone('#34\nBuilder~\nName~\n3400 3499 5 2\nG 0 nope 500\nS\n')).toThrow(
+      ParseError,
+    );
+  });
+
+  it('accepts CircleMUD headerless zones (no builders line) with trailing non-tabbed comments', () => {
+    // CircleMUD zone command comments use spaces (not tabs), e.g. "G 1 3050 500   Scroll Of Identify"
+    // The trailing text is non-numeric so the parser stops at three args.
+    const record = onlyZone(
+      parseZone('#35\nFallback Zone~\n3500 3599 15 2\nG 1 3050 500   Scroll\nM 0 3000 1 3000\nS\n'),
+    );
+
+    expect(record.builders).toBe('None.');
+    expect(record.name).toBe('Fallback Zone');
+    expect(record.commands).toHaveLength(2);
+    const gCmd = record.commands[0];
+    expect(gCmd?.command).toBe('G');
+    expect(gCmd?.args).toEqual([3050, 500]);
+    const mCmd = record.commands[1];
+    expect(mCmd?.command).toBe('M');
+    expect(mCmd?.args).toEqual([3000, 1, 3000]);
   });
 });

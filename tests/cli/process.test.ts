@@ -257,8 +257,8 @@ describe('processWorkPlan', () => {
   it('returns 1 when stop-on-warning is triggered', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'cli-process-'));
     try {
-      // warning-sentinel.wld emits warnings for sentinel key/target values.
-      const inputFile = fixturePath('world/warning-sentinel.wld');
+      // warning-sector.wld emits a warning for an out-of-range sector type.
+      const inputFile = fixturePath('world/warning-sector.wld');
       const plan: WorkPlan = { kind: 'file', filePath: inputFile };
       const options = makeOptions({ outputDirectory: tempDir, stopOnWarning: true });
       const deps = makeDeps();
@@ -268,12 +268,12 @@ describe('processWorkPlan', () => {
       expect(exitCode).toBe(1);
 
       // Output temp file should have been cleaned up.
-      const outputFile = join(tempDir, 'warning-sentinel.wld.json');
+      const outputFile = join(tempDir, 'warning-sector.wld.json');
       expect(existsSync(outputFile)).toBe(false);
       expect(existsSync(outputFile + '.tmp')).toBe(false);
 
       // Warning message should appear in the log.
-      expect(deps.lines.some((l) => l.includes('sentinel'))).toBe(true);
+      expect(deps.lines.some((l) => l.includes('sector type'))).toBe(true);
     } finally {
       rmSync(tempDir, { force: true, recursive: true });
     }
@@ -282,7 +282,7 @@ describe('processWorkPlan', () => {
   it('logs warnings but continues when stop-on-warning is false', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'cli-process-'));
     try {
-      const inputFile = fixturePath('world/warning-sentinel.wld');
+      const inputFile = fixturePath('world/warning-sector.wld');
       const plan: WorkPlan = { kind: 'file', filePath: inputFile };
       const options = makeOptions({ outputDirectory: tempDir, stopOnWarning: false });
       const deps = makeDeps();
@@ -292,11 +292,11 @@ describe('processWorkPlan', () => {
       expect(exitCode).toBe(0);
 
       // Output file should exist — parsing completed despite warning.
-      const outputFile = join(tempDir, 'warning-sentinel.wld.json');
+      const outputFile = join(tempDir, 'warning-sector.wld.json');
       expect(existsSync(outputFile)).toBe(true);
 
       // Warning was logged.
-      expect(deps.lines.some((l) => l.includes('sentinel'))).toBe(true);
+      expect(deps.lines.some((l) => l.includes('sector type'))).toBe(true);
     } finally {
       rmSync(tempDir, { force: true, recursive: true });
     }

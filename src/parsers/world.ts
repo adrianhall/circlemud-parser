@@ -386,8 +386,8 @@ function parseRoomDirection(
     keywords: splitKeywords(keywordString),
     exitFlags: resolveFlagNames(exitFlagsValue, EXIT_FLAGS),
     exitFlagsBits: bitvectorToAsciiFlags(exitFlagsValue),
-    keyVnum: coerceKeyVnum(numbers.keyVnum, direction, context, numericLine, vnum),
-    toRoomVnum: coerceToRoomVnum(numbers.toRoomVnum, direction, context, numericLine, vnum),
+    keyVnum: coerceKeyVnum(numbers.keyVnum, direction, context, vnum),
+    toRoomVnum: coerceToRoomVnum(numbers.toRoomVnum, direction, context, vnum),
   };
 }
 
@@ -443,29 +443,25 @@ function doorTypeToExitFlags(doorType: number): BitVector | null {
 }
 
 /**
- * Converts absent-key sentinels to public `null` while emitting a warning.
+ * Converts absent-key sentinels to public `null`.
+ *
+ * The C loader (`data/tbamud/src/db.c`) silently maps key sentinels `-1` and `65535` to `NOTHING`,
+ * so this is normal data rather than a recoverable problem. It is logged at debug level only.
  *
  * @param value - Raw source key VNUM.
- * @param direction - Direction index used in the warning message.
+ * @param direction - Direction index used in the debug message.
  * @param context - Normalized parser context.
- * @param line - Source line containing the sentinel.
- * @param vnum - Room VNUM used for warning context.
+ * @param vnum - Room VNUM used for debug context.
  * @returns Public key VNUM or `null`.
  */
 function coerceKeyVnum(
   value: Vnum,
   direction: number,
   context: WorldParserContext,
-  line: SourceLine,
   vnum: Vnum,
 ): Vnum | null {
   if (value === -1 || value === 65535) {
-    emitWarning(
-      `Coerced key sentinel ${value} to null for D${direction}`,
-      context,
-      sourceForLine(context, line.startLine),
-      vnum,
-    );
+    context.logger.debug(`Coerced key sentinel ${value} to null for room #${vnum} D${direction}`);
     return null;
   }
 
@@ -473,28 +469,26 @@ function coerceKeyVnum(
 }
 
 /**
- * Converts absent-target sentinels to public `null` while emitting a warning.
+ * Converts absent-target sentinels to public `null`.
+ *
+ * The C loader (`data/tbamud/src/db.c`) silently maps target sentinels `-1` and `0` to `NOWHERE`,
+ * so this is normal data rather than a recoverable problem. It is logged at debug level only.
  *
  * @param value - Raw source target room VNUM.
- * @param direction - Direction index used in the warning message.
+ * @param direction - Direction index used in the debug message.
  * @param context - Normalized parser context.
- * @param line - Source line containing the sentinel.
- * @param vnum - Room VNUM used for warning context.
+ * @param vnum - Room VNUM used for debug context.
  * @returns Public target room VNUM or `null`.
  */
 function coerceToRoomVnum(
   value: Vnum,
   direction: number,
   context: WorldParserContext,
-  line: SourceLine,
   vnum: Vnum,
 ): Vnum | null {
   if (value === -1 || value === 0) {
-    emitWarning(
-      `Coerced target room sentinel ${value} to null for D${direction}`,
-      context,
-      sourceForLine(context, line.startLine),
-      vnum,
+    context.logger.debug(
+      `Coerced target room sentinel ${value} to null for room #${vnum} D${direction}`,
     );
     return null;
   }

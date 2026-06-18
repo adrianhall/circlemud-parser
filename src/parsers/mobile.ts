@@ -149,8 +149,9 @@ export function parseMobileFile(fileName: string, options: ParseOptions = {}): M
 /**
  * Parses mobile content from a string or Buffer.
  *
- * Supports the current 10-field mobile flag layout by default. With `strict: false`, also accepts
- * the legacy four-field mobile flag layout and zero-fills the remaining flag vectors.
+ * Supports both the current 10-field mobile flag layout (tbaMUD) and the legacy four-field layout
+ * (CircleMUD), auto-detecting by field count and zero-filling the remaining flag vectors when the
+ * legacy layout is used. The `strict` option controls validation severity, not format selection.
  *
  * @param input - Mobile file contents as a string or Buffer.
  * @param options - Parser options controlling encoding, source names, warnings, and logging.
@@ -344,15 +345,6 @@ function parseMobileNumbers(
   }
 
   if (tokens.length === 4) {
-    if (context.strict) {
-      fail(
-        'Legacy mobile flag lines require strict: false',
-        context,
-        sourceForLine(context, line.startLine),
-        vnum,
-      );
-    }
-
     const actionFlagsSet = parseLegacyBitVectorSet(tokens[0], parseAsciiFlag);
     const affectFlagsSet = parseLegacyBitVectorSet(tokens[1], parseAsciiAffectFlag);
     const alignment = parseTokenInteger(tokens[2]);
@@ -634,7 +626,9 @@ function parseEnhancedMobileSection(
  * @param vnum - Mobile VNUM used for error and warning context.
  * @param enhanced - Enhanced data object to mutate.
  * @returns Nothing.
- * @throws ParseError in strict mode for unknown, missing, malformed, or out-of-range values.
+ * @throws ParseError in strict mode for unknown, missing, or malformed espec values. Out-of-range
+ *   values are clamped to their valid range with a warning (matching the C `RANGE()` macro), not
+ *   treated as errors.
  */
 function parseEspecLine(
   text: string,
@@ -682,18 +676,44 @@ function parseEspecLine(
   }
 
   if (!isEspecValueInRange(value, definition)) {
-    const message = `Enhanced mobile keyword '${keyword}' value ${value} is outside ${especRangeText(
-      definition,
-    )}`;
-
-    if (context.strict) {
-      fail(message, context, sourceForLine(context, line.startLine), vnum);
-    }
-
-    emitWarning(message, context, sourceForLine(context, line.startLine), vnum);
+    // The C source clamps out-of-range espec values via the RANGE() macro in
+    // interpret_espec() (data/tbamud/src/db.c) rather than rejecting them. Mirror that
+    // behavior with a warning so old CircleMUD data (e.g. a mindless mob with `Int: 1`)
+    // parses without requiring strict: false.
+    const clamped = clampEspecValue(value, definition);
+    emitWarning(
+      `Clamped enhanced mobile keyword '${keyword}' value ${value} to ${clamped} (outside ${especRangeText(
+        definition,
+      )})`,
+      context,
+      sourceForLine(context, line.startLine),
+      vnum,
+    );
+    enhanced[definition.property] = clamped;
+    return;
   }
 
   enhanced[definition.property] = value;
+}
+
+/**
+ * Clamps an enhanced mobile value to its known range, matching the C `RANGE()` macro.
+ *
+ * @param value - Parsed source value.
+ * @param definition - Espec field definition.
+ * @returns The value clamped to the definition's min/max bounds.
+ */
+function clampEspecValue(value: number, definition: EspecDefinition): number {
+  let clamped = value;
+
+  if (definition.min !== undefined && clamped < definition.min) {
+    clamped = definition.min;
+  }
+  if (definition.max !== undefined && clamped > definition.max) {
+    clamped = definition.max;
+  }
+
+  return clamped;
 }
 
 /**

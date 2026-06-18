@@ -13,21 +13,31 @@ The bundled TbaMUD source tree in `data/tbamud` is the reference implementation.
 ## Relevant Sources
 
 - `README.md` describes the package goal, CLI/library intent, development commands, and bundled TbaMUD reference source.
-- `docs/LIBRARY.md` is the working API design for record shapes, parser behavior, reader helpers, errors, logging, JSON output, and implementation phases.
+- `docs/LIBRARY.md` is the working API design for record shapes, parser behavior, reader helpers, errors, logging, JSON output, and implementation phases. See the **Format auto-detection** section in **Resolved Decisions** for the full comparison of CircleMUD vs tbaMUD file format differences.
 - `data/tbamud/src/db.c` contains the main reference loaders and low-level C parser helpers such as `fread_string`, `fread_number`, `fread_letter`, and `asciiflag_conv`.
 - `data/tbamud/src/constants.c` contains flag name tables used to resolve public flag arrays and canonical `*Bits` strings.
-- `data/tbamud/lib/world` contains fixture-quality world data for parser validation once type-specific parsers exist.
+- `data/tbamud/lib/world` contains tbaMUD fixture-quality world data for parser validation.
+- `data/circle-3.1/lib/world` contains CircleMUD 3.1 world data, used as fixtures for CircleMUD format compatibility tests.
 
 ## Implementation Direction
 
-The parser should be built in layers.
+The parser has been built in layers:
 
 1. Reader layer: cursor-style `MudReader`, C-equivalent low-level helpers, and flag resolution helpers.
 2. Core record infrastructure: shared types, parser errors, record classes, and stable `toJSON()` output.
 3. File dispatch: extension inference, `parseFile()`, and type-specific file/content parser entry points.
-4. Record parsers: implement in the documented phase order of Zone, World, Object, Mobile, then Shop, Quest, and Trigger.
+4. Record parsers implemented: Zone, World, Object, Mobile, Shop, Quest, and Trigger.
 
-Follow `docs/LIBRARY.md` for public API names and behavior. Keep the high-level API small, synchronous for now, and easy to use from the CLI.
+Both CircleMUD 3.1 and tbaMUD formats are supported. Format selection is **automatic** — parsers
+detect CircleMUD vs tbaMUD layouts by field count and header structure. The `strict` option
+controls **validation severity only** (not format selection). Values the C loader silently
+normalizes are normalized unconditionally with a warning regardless of `strict` (e.g. out-of-range
+espec stats are clamped to their valid range, matching the `RANGE()` macro in `interpret_espec()`).
+`strict: false` only downgrades genuinely malformed input the C loader would reject (e.g. an
+unrecognized espec keyword) from an error to a warning.
+
+Follow `docs/LIBRARY.md` for public API names and behavior. Keep the high-level API small,
+synchronous, and easy to use from the CLI.
 
 ## Data Model Rules
 
@@ -90,7 +100,7 @@ This means the hook formats and lint-fixes staged files through `lint-staged`, t
 
 Add focused unit tests for each parser layer as it is introduced. The reader and low-level helper routines should maintain 100% coverage because they are deterministic and small.
 
-For parser work, prefer short inline fixtures first. Add fixture tests against `data/tbamud/lib/world` once each type-specific parser exists.
+For parser work, prefer short inline fixtures first. Add fixture tests against both `data/tbamud/lib/world` and `data/circle-3.1/lib/world` once each type-specific parser exists, so both corpora are exercised. Both corpora parse with default options (`strict: true`); the parser clamps values the C loader would normalize rather than erroring on them.
 
 Before finishing a coding task, run `npm run check`. If formatting or linting fails, run `npm run fix`, then rerun `npm run check`.
 

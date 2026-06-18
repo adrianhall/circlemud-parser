@@ -139,6 +139,44 @@ describe('parseMobileFile', () => {
     );
   });
 
+  it('parses bundled CircleMUD 3.1 mobile files with default (strict) options', () => {
+    const mobileDirectory = fileURLToPath(
+      new URL('../../data/circle-3.1/lib/world/mob/', import.meta.url),
+    );
+    const mobileFiles = readdirSync(mobileDirectory).filter((name) => name.endsWith('.mob'));
+
+    expect(mobileFiles.length).toBeGreaterThan(0);
+
+    let parsedRecordCount = 0;
+
+    for (const mobileFile of mobileFiles) {
+      // Default strict mode parses old CircleMUD data; out-of-range espec values are clamped.
+      const records = parseMobileFile(join(mobileDirectory, mobileFile));
+      parsedRecordCount += records.length;
+
+      for (const record of records) {
+        expect(record.vnum).toBeGreaterThanOrEqual(0);
+        expect(record.aliases.length).toBeGreaterThan(0);
+      }
+    }
+
+    expect(parsedRecordCount).toBeGreaterThan(0);
+  });
+
+  it('parses CircleMUD mobile #3000 with correct legacy flag resolution', () => {
+    const mobileDirectory = fileURLToPath(
+      new URL('../../data/circle-3.1/lib/world/mob/', import.meta.url),
+    );
+    const [record] = parseMobileFile(join(mobileDirectory, '30.mob'));
+
+    expect(record?.vnum).toBe(3000);
+    expect(record?.aliases).toEqual(['wizard']);
+    expect(record?.kind).toBe('simple');
+    expect(record?.stats.level).toBe(33);
+    // Legacy 4-field flag line "ablno d 900 S" maps to the expected action flags.
+    expect(record?.actionFlags).toEqual(['SPEC', 'SENTINEL', 'MEMORY', 'NO_CHARM', 'NO_SUMMN']);
+  });
+
   it('parses bundled tbaMUD mobile files', () => {
     const mobileDirectory = fileURLToPath(
       new URL('../../data/tbamud/lib/world/mob/', import.meta.url),
@@ -204,7 +242,7 @@ $
     expect(record.vnum).toBe(13);
   });
 
-  it('accepts legacy flag lines only when strict is false', () => {
+  it('auto-detects legacy four-field mobile flag lines (CircleMUD format)', () => {
     const source = `#10
 legacy guard~
 a legacy guard~
@@ -217,13 +255,11 @@ ad a -50 S
 $
 `;
 
-    expect(() => parseMobile(source)).toThrow(ParseError);
-
+    // Now accepted in strict mode — auto-detected by field count, not gated by strict.
     const { logger, warn } = testLogger();
     const warnings: unknown[] = [];
     const record = firstMobile(
       parseMobile(source, {
-        strict: false,
         logger,
         onWarning: (warning): void => {
           warnings.push(warning);
@@ -237,9 +273,13 @@ $
     expect(record.affectFlagsBits).toBe('b 0 0 0');
     expect(warn).toHaveBeenCalledWith('Converted legacy mobile flags to 128-bit form');
     expect(warnings).toHaveLength(1);
+
+    // Also works when strict is explicitly false.
+    const strictFalseRecord = firstMobile(parseMobile(source, { strict: false }));
+    expect(strictFalseRecord.actionFlags).toEqual(['SPEC', 'ISNPC']);
   });
 
-  it('throws for malformed legacy flag lines in non-strict mode', () => {
+  it('throws for malformed legacy flag lines regardless of strict mode', () => {
     const invalidFlagSource = `#10
 legacy guard~
 a legacy guard~
@@ -253,11 +293,56 @@ $
 `;
     const invalidLetterSource = invalidFlagSource.replace('ad -1 -50 S', 'ad a -50 SS');
 
+    expect(() => parseMobile(invalidFlagSource)).toThrow(ParseError);
     expect(() => parseMobile(invalidFlagSource, { strict: false })).toThrow(ParseError);
+    expect(() => parseMobile(invalidLetterSource)).toThrow(ParseError);
     expect(() => parseMobile(invalidLetterSource, { strict: false })).toThrow(ParseError);
   });
 
-  it('handles invalid enhanced specs according to strictness', () => {
+  it('clamps out-of-range enhanced specs to their valid range (matching C RANGE macro)', () => {
+    const baseSource = `#10
+enhanced guard~
+an enhanced guard~
+Enhanced guard desc.~
+~
+0 0 0 0 0 0 0 0 0 E
+1 20 9 1d1+1 1d2+0
+1 10
+8 8 0
+PLACEHOLDER
+E
+$
+`;
+    const aboveRangeSource = baseSource.replace('PLACEHOLDER', 'Str: 30');
+    const belowRangeSource = baseSource.replace('PLACEHOLDER', 'BareHandAttack: -1');
+
+    // Out-of-range values are clamped (not rejected) in BOTH strict and non-strict modes,
+    // mirroring interpret_espec()'s RANGE() macro in the C source.
+    const aboveStrict = firstMobile(parseMobile(aboveRangeSource));
+    expect(aboveStrict.enhanced).toEqual({ str: 25 });
+
+    const { logger, warn } = testLogger();
+    const aboveRecord = firstMobile(parseMobile(aboveRangeSource, { logger }));
+    expect(aboveRecord.enhanced).toEqual({ str: 25 });
+    expect(warn).toHaveBeenCalledWith(
+      "Clamped enhanced mobile keyword 'Str' value 30 to 25 (outside range 3..25)",
+    );
+
+    const belowStrict = firstMobile(parseMobile(belowRangeSource));
+    expect(belowStrict.enhanced).toEqual({ bareHandAttack: 0 });
+
+    const belowRecord = firstMobile(parseMobile(belowRangeSource, { logger }));
+    expect(belowRecord.enhanced).toEqual({ bareHandAttack: 0 });
+    expect(warn).toHaveBeenCalledWith(
+      "Clamped enhanced mobile keyword 'BareHandAttack' value -1 to 0 (outside minimum 0)",
+    );
+
+    // The clamped value also holds when strict is explicitly false.
+    const belowNonStrict = firstMobile(parseMobile(belowRangeSource, { strict: false }));
+    expect(belowNonStrict.enhanced).toEqual({ bareHandAttack: 0 });
+  });
+
+  it('handles unknown, malformed, and missing enhanced specs according to strictness', () => {
     const unknownSource = `#10
 enhanced guard~
 an enhanced guard~
@@ -271,33 +356,17 @@ Unknown: 5
 E
 $
 `;
-    const outOfRangeSource = unknownSource.replace('Unknown: 5', 'Str: 30');
-    const belowRangeSource = unknownSource.replace('Unknown: 5', 'BareHandAttack: -1');
     const malformedValueSource = unknownSource.replace('Unknown: 5', 'Str: nope');
     const missingValueSource = unknownSource.replace('Unknown: 5', 'Str');
 
     expect(() => parseMobile(unknownSource)).toThrow(ParseError);
-    expect(() => parseMobile(outOfRangeSource)).toThrow(ParseError);
-    expect(() => parseMobile(belowRangeSource)).toThrow(ParseError);
     expect(() => parseMobile(malformedValueSource)).toThrow(ParseError);
     expect(() => parseMobile(missingValueSource)).toThrow(ParseError);
 
     const { logger, warn } = testLogger();
-    const record = firstMobile(parseMobile(outOfRangeSource, { strict: false, logger }));
-
-    expect(record.enhanced).toEqual({ str: 30 });
-    expect(warn).toHaveBeenCalledWith(
-      "Enhanced mobile keyword 'Str' value 30 is outside range 3..25",
-    );
 
     const unknownRecord = firstMobile(parseMobile(unknownSource, { strict: false, logger }));
     expect(unknownRecord.enhanced).toEqual({});
-
-    const belowRangeRecord = firstMobile(parseMobile(belowRangeSource, { strict: false, logger }));
-    expect(belowRangeRecord.enhanced).toEqual({ bareHandAttack: -1 });
-    expect(warn).toHaveBeenCalledWith(
-      "Enhanced mobile keyword 'BareHandAttack' value -1 is outside minimum 0",
-    );
 
     const malformedValueRecord = firstMobile(
       parseMobile(malformedValueSource, { strict: false, logger }),

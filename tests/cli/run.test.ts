@@ -85,7 +85,7 @@ describe('runCli', () => {
   it('returns 1 with stop-on-warning for a warning-producing file', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'cli-run-'));
     try {
-      const input = fixturePath('world/warning-sentinel.wld');
+      const input = fixturePath('world/warning-sector.wld');
       const { lines, sink } = collectingSink();
       const code = runCli(['-O', tempDir, '--overwrite', '--stop-on-warning', input], {
         fs: nodeFs,
@@ -93,7 +93,7 @@ describe('runCli', () => {
       });
 
       expect(code).toBe(1);
-      expect(lines.some((l) => l.includes('sentinel'))).toBe(true);
+      expect(lines.some((l) => l.includes('sector type'))).toBe(true);
     } finally {
       rmSync(tempDir, { force: true, recursive: true });
     }

@@ -117,6 +117,44 @@ describe('parseObjectFile', () => {
     );
   });
 
+  it('parses bundled CircleMUD 3.1 object files', () => {
+    const objectDirectory = fileURLToPath(
+      new URL('../../data/circle-3.1/lib/world/obj/', import.meta.url),
+    );
+    const objectFiles = readdirSync(objectDirectory).filter((name) => name.endsWith('.obj'));
+
+    expect(objectFiles.length).toBeGreaterThan(0);
+
+    let parsedRecordCount = 0;
+
+    for (const objectFile of objectFiles) {
+      const records = parseObjectFile(join(objectDirectory, objectFile));
+      parsedRecordCount += records.length;
+
+      for (const record of records) {
+        expect(record.vnum).toBeGreaterThanOrEqual(0);
+        expect(record.aliases.length).toBeGreaterThan(0);
+      }
+    }
+
+    expect(parsedRecordCount).toBeGreaterThan(0);
+  });
+
+  it('parses CircleMUD object #3000 with correct legacy flag and cost resolution', () => {
+    const objectDirectory = fileURLToPath(
+      new URL('../../data/circle-3.1/lib/world/obj/', import.meta.url),
+    );
+    const [record] = parseObjectFile(join(objectDirectory, '30.obj'));
+
+    expect(record?.vnum).toBe(3000);
+    expect(record?.aliases).toEqual(['barrel', 'beer']);
+    expect(record?.objectTypeName).toBe('LIQ CONTAINER');
+    expect(record?.values).toEqual([50, 50, 1, 0]);
+    expect(record?.weight).toBe(65);
+    expect(record?.cost).toBe(300);
+    expect(record?.rent).toBe(100);
+  });
+
   it('parses bundled tbaMUD object files', () => {
     const objectDirectory = fileURLToPath(
       new URL('../../data/tbamud/lib/world/obj/', import.meta.url),
@@ -181,7 +219,7 @@ $
     expect(record.vnum).toBe(13);
   });
 
-  it('accepts legacy flag lines only when strict is false', () => {
+  it('auto-detects legacy three- and four-field object flag lines (CircleMUD format)', () => {
     const source = `#10
 legacy thing~
 a legacy thing~
@@ -193,13 +231,11 @@ Legacy desc.~
 $
 `;
 
-    expect(() => parseObject(source)).toThrow(ParseError);
-
+    // Now accepted in strict mode — auto-detected by field count, not gated by strict.
     const { logger, warn } = testLogger();
     const warnings: unknown[] = [];
     const record = firstObject(
       parseObject(source, {
-        strict: false,
         logger,
         onWarning: (warning) => {
           warnings.push(warning);
@@ -223,12 +259,14 @@ $
     expect(record.wearFlagsBits).toBe('ano 0 0 0');
     expect(record.affectFlags).toEqual([]);
     expect(record.affectFlagsBits).toBe('0 0 0 0');
+
+    // Also works when strict is explicitly false.
+    const strictFalseRecord = firstObject(parseObject(source, { strict: false }));
+    expect(strictFalseRecord.extraFlags).toEqual(['GLOW', 'HUM']);
   });
 
-  it('accepts legacy affect flags in non-strict mode using shifted affect bits', () => {
-    const record = firstObject(
-      parseObject(
-        `#11
+  it('auto-detects legacy four-field object flags including shifted affect bits', () => {
+    const source = `#11
 legacy affect~
 a legacy affect~
 Legacy affect desc.~
@@ -237,19 +275,20 @@ Legacy affect desc.~
 1 2 3 4
 1 2 3 4 5
 $
-`,
-        { strict: false },
-      ),
-    );
+`;
 
+    // Accepted in default strict mode.
+    const record = firstObject(parseObject(source));
     expect(record.affectFlags).toEqual(['BLIND']);
     expect(record.affectFlagsBits).toBe('b 0 0 0');
+
+    // Also works when strict is explicitly false.
+    const strictFalseRecord = firstObject(parseObject(source, { strict: false }));
+    expect(strictFalseRecord.affectFlags).toEqual(['BLIND']);
   });
 
-  it('throws ParseError for malformed legacy object flag tokens in non-strict mode', () => {
-    expect(() =>
-      parseObject(
-        `#17
+  it('throws ParseError for malformed legacy object flag tokens regardless of strict mode', () => {
+    const badExtraSource = `#17
 legacy bad extra~
 a legacy bad extra~
 Legacy bad extra desc.~
@@ -258,13 +297,8 @@ Legacy bad extra desc.~
 1 2 3 4
 1 2 3 4 5
 $
-`,
-        { strict: false },
-      ),
-    ).toThrow(ParseError);
-    expect(() =>
-      parseObject(
-        `#18
+`;
+    const badAffectSource = `#18
 legacy bad affect~
 a legacy bad affect~
 Legacy bad affect desc.~
@@ -273,10 +307,12 @@ Legacy bad affect desc.~
 1 2 3 4
 1 2 3 4 5
 $
-`,
-        { strict: false },
-      ),
-    ).toThrow(ParseError);
+`;
+
+    expect(() => parseObject(badExtraSource)).toThrow(ParseError);
+    expect(() => parseObject(badExtraSource, { strict: false })).toThrow(ParseError);
+    expect(() => parseObject(badAffectSource)).toThrow(ParseError);
+    expect(() => parseObject(badAffectSource, { strict: false })).toThrow(ParseError);
   });
 
   it('accepts shorter cost lines using the C parser defaults', () => {

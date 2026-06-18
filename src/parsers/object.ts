@@ -115,8 +115,10 @@ export function parseObjectFile(fileName: string, options: ParseOptions = {}): O
 /**
  * Parses object content from a string or Buffer.
  *
- * Supports the current 13-field object flag layout by default. With `strict: false`, also accepts
- * the legacy three- and four-field object flag layouts and zero-fills the remaining flag vectors.
+ * Supports both the current 13-field object flag layout (tbaMUD) and the legacy three- and
+ * four-field layouts (CircleMUD), auto-detecting by field count and zero-filling the remaining flag
+ * vectors when a legacy layout is used. The `strict` option controls validation severity, not
+ * format selection.
  *
  * @param input - Object file contents as a string or Buffer.
  * @param options - Parser options controlling encoding, source names, warnings, and logging.
@@ -367,15 +369,6 @@ function parseObjectNumbers(
   }
 
   if (tokens.length === 3 || tokens.length === 4) {
-    if (context.strict) {
-      fail(
-        'Legacy object flag lines require strict: false',
-        context,
-        sourceForLine(context, line.startLine),
-        vnum,
-      );
-    }
-
     const objectType = parseTokenInteger(tokens[0]);
     const extraFlagsSet = parseLegacyBitVectorSet(tokens[1], parseAsciiFlag);
     const wearFlagsSet = parseLegacyBitVectorSet(tokens[2], parseAsciiFlag);

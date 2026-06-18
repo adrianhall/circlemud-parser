@@ -13,10 +13,26 @@ primarily follow `data/tbamud/src/db.c` and the related loader/editor code.
 
 ## Status
 
-Both the CLI (which generated JSON files) and the library (which generates typed TypeScript objects)
-are fully implemented. 
+Both the CLI (which generates JSON files) and the library (which generates typed TypeScript objects)
+are fully implemented.
 
-## Install from GitHub:
+Both CircleMUD 3.1 and tbaMUD world data formats are supported. Format selection is automatic —
+parsers detect CircleMUD vs tbaMUD layouts by field count and header structure. The `strict` option
+controls validation severity only (not format selection).
+
+To convert a CircleMUD world directory:
+
+```sh
+npm run convert:circle
+```
+
+To convert a TbaMUD world directory:
+
+```sh
+npm run convert:tbamud
+```
+
+## Install from GitHub
 
 ```sh
 npm install github:adrianhall/circlemud-parser

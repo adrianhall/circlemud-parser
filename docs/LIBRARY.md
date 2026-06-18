@@ -595,8 +595,16 @@ Line and file context should be exposed through `source`. For parser errors rais
 record, include `recordType` and `vnum` when known. Fatal parse paths should log with
 `logger.error` before throwing the error.
 
-`strict` should default to `true`. Non-strict parsing can later preserve compatibility with older
-CircleMUD variants when the reference source contains conversion behavior.
+`strict` should default to `true`. It controls **validation severity only**, not format selection.
+All parsers auto-detect CircleMUD and tbaMUD layouts by structure (field counts, missing builders
+line, command argument counts) so both formats parse without any flags.
+
+Values that the reference C loader silently normalizes are normalized unconditionally with a
+warning, regardless of `strict` — for example, out-of-range enhanced mobile stats are clamped to
+their valid range (matching the `RANGE()` macro in `interpret_espec()`), and out-of-range room
+sector types are reset to `inside`. Setting `strict: false` only downgrades genuinely malformed
+input that the C loader would reject — such as an unrecognized espec keyword or a non-numeric espec
+value — from an error to a warning.
 
 ## JSON Output Contract
 
@@ -655,7 +663,8 @@ This layout is not part of the public API, but it keeps the layers clear.
 - Unit test `parseAsciiFlag`, `parseAsciiAffectFlag`, `bitvectorToAsciiFlags`, `resolveFlagNames`,
   `parseAt`, tilde string reading, number reading, and skipped-line behavior independently.
 - Unit test each type-specific content parser with short inline fixtures.
-- Add fixture tests against files under `data/tbamud/lib/world` once each parser is implemented.
+- Add fixture tests against files under `data/tbamud/lib/world` and `data/circle-3.1/lib/world`
+  once each parser is implemented, so both corpora are exercised.
 - Test `parseFile()` extension inference separately from record parsing.
 - Test `toJSON()` output so CLI behavior remains stable.
 
@@ -666,3 +675,14 @@ This layout is not part of the public API, but it keeps the layers clear.
 - **Parser phases**: Record types are implemented in phases — Zone first, then World, Object, Mobile,
   and remaining types — rather than all at once.
 - **Help files**: Help files are a separate concern and are out of scope for this library.
+- **Format auto-detection**: All parsers accept both CircleMUD and tbaMUD layouts by inspecting
+  field counts and header structure. The `strict` flag is validation severity only. Differences
+  handled:
+  - `.wld`: 3-field room flags line (CircleMUD) vs 6-field (tbaMUD) — auto-detected by token count.
+  - `.mob`: 4-field legacy flag line (CircleMUD) vs 10-field (tbaMUD) — auto-detected by token count.
+  - `.obj`: 3/4-field legacy flag line (CircleMUD) vs 13-field (tbaMUD) — auto-detected by token count.
+  - `.zon`: No builders line in CircleMUD header (tbaMUD has builders + name); zone reset `G`
+    command uses 3 numeric arguments in CircleMUD, 4 in tbaMUD (the extra arg3 is unused at reset).
+  - `.shp`: Named trade types (CircleMUD, e.g. `SCROLL`) and numeric trade types (tbaMUD, e.g. `2`)
+    both resolve to the same `itemType` number via the `ITEM_TYPES` table.
+  - CircleMUD 3.1 has no `.qst` or `.trg` files; those parsers are tbaMUD-specific.

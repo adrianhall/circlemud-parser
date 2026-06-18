@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
@@ -153,6 +154,46 @@ describe('parseShopFile', () => {
     expect(() => parseShopFile(fixturePath('missing-terminator.shp'))).toThrow(
       'Expected tilde-terminated string while reading shop header or file terminator',
     );
+  });
+
+  it('parses bundled CircleMUD 3.1 shop files', () => {
+    const shopDirectory = fileURLToPath(
+      new URL('../../data/circle-3.1/lib/world/shp/', import.meta.url),
+    );
+    const shopFiles = readdirSync(shopDirectory).filter((name) => name.endsWith('.shp'));
+
+    expect(shopFiles.length).toBeGreaterThan(0);
+
+    let parsedRecordCount = 0;
+
+    for (const shopFile of shopFiles) {
+      const records = parseShopFile(join(shopDirectory, shopFile));
+      parsedRecordCount += records.length;
+
+      for (const record of records) {
+        expect(record.vnum).toBeGreaterThanOrEqual(0);
+      }
+    }
+
+    expect(parsedRecordCount).toBeGreaterThan(0);
+  });
+
+  it('parses CircleMUD shop #3000 with named buy-type resolution', () => {
+    const record = parseShopFile(
+      fileURLToPath(new URL('../../data/circle-3.1/lib/world/shp/30.shp', import.meta.url)),
+    ).find((r) => r.vnum === 3000);
+
+    expect(record).toBeDefined();
+    expect(record?.productVnums).toEqual([3050, 3051, 3052, 3053, 3054]);
+    // CircleMUD uses named trade types (SCROLL, WAND, STAFF, POTION)
+    // that resolve to the same numeric item type as tbaMUD's numeric form.
+    expect(record?.buyTypes).toEqual([
+      { itemType: 2, itemTypeName: 'SCROLL', expression: null },
+      { itemType: 3, itemTypeName: 'WAND', expression: null },
+      { itemType: 4, itemTypeName: 'STAFF', expression: null },
+      { itemType: 10, itemTypeName: 'POTION', expression: null },
+    ]);
+    expect(record?.keeperVnum).toBe(3000);
   });
 
   it('parses representative bundled tbaMUD shop files', () => {

@@ -1,0 +1,7 @@
+#5
+Sector Room~
+Room with an out-of-range sector type that emits a warning.
+~
+5 0 0 0 0 11
+S
+$

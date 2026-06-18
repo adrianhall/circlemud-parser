@@ -28,7 +28,11 @@ function loggerMock(): ReturnType<typeof vi.fn<() => void>> {
   return vi.fn((): void => {});
 }
 
-function testLogger(): { logger: Logger; warn: ReturnType<typeof loggerMock> } {
+function testLogger(): {
+  logger: Logger;
+  debug: ReturnType<typeof loggerMock>;
+  warn: ReturnType<typeof loggerMock>;
+} {
   const debug = loggerMock();
   const info = loggerMock();
   const warn = loggerMock();
@@ -41,6 +45,7 @@ function testLogger(): { logger: Logger; warn: ReturnType<typeof loggerMock> } {
       warn,
       error,
     },
+    debug,
     warn,
   };
 }
@@ -99,6 +104,45 @@ describe('parseWorldFile', () => {
     expect(() => parseWorldFile(fixturePath('missing-terminator.wld'))).toThrow(
       'Expected world record header or $ before EOF',
     );
+  });
+
+  it('parses bundled CircleMUD 3.1 world files', () => {
+    const worldDirectory = fileURLToPath(
+      new URL('../../data/circle-3.1/lib/world/wld/', import.meta.url),
+    );
+    const worldFiles = readdirSync(worldDirectory).filter((name) => name.endsWith('.wld'));
+
+    expect(worldFiles.length).toBeGreaterThan(0);
+
+    let parsedRecordCount = 0;
+
+    for (const worldFile of worldFiles) {
+      const records = parseWorldFile(join(worldDirectory, worldFile));
+      parsedRecordCount += records.length;
+
+      for (const record of records) {
+        expect(record.vnum).toBeGreaterThanOrEqual(0);
+        expect(record.name.length).toBeGreaterThan(0);
+      }
+    }
+
+    expect(parsedRecordCount).toBeGreaterThan(0);
+  });
+
+  it('parses CircleMUD room #3000 with correct 3-field flag resolution', () => {
+    const worldDirectory = fileURLToPath(
+      new URL('../../data/circle-3.1/lib/world/wld/', import.meta.url),
+    );
+    const [record] = parseWorldFile(join(worldDirectory, '30.wld'));
+
+    expect(record?.vnum).toBe(3000);
+    expect(record?.name).toBe('The Reading Room');
+    // Circle 3-field line: "30 cdeh 0" — flags cdeh = bits 2,3,4,7
+    expect(record?.roomFlags).toEqual(['NO_MOB', 'INDOORS', 'PEACEFUL', 'NO_MAGIC']);
+    expect(record?.roomFlagsBits).toBe('cdeh 0 0 0');
+    expect(record?.sectorType).toBe(0);
+    expect(record?.directions).toHaveLength(1);
+    expect(record?.directions[0]?.direction).toBe(1);
   });
 
   it('parses bundled tbaMUD world files', () => {
@@ -238,8 +282,8 @@ $
     ]);
   });
 
-  it('warns when coercing key and target room sentinels to null', () => {
-    const { logger, warn } = testLogger();
+  it('coerces key and target room sentinels to null, logging at debug level only', () => {
+    const { logger, debug, warn } = testLogger();
     const warnings: unknown[] = [];
     const record = firstWorld(
       parseWorld(
@@ -269,36 +313,13 @@ $
       ),
     );
 
-    expect(warn).toHaveBeenCalledWith('Coerced key sentinel -1 to null for D0');
-    expect(warn).toHaveBeenCalledWith('Coerced target room sentinel -1 to null for D0');
-    expect(warn).toHaveBeenCalledWith('Coerced key sentinel 65535 to null for D1');
-    expect(warn).toHaveBeenCalledWith('Coerced target room sentinel 0 to null for D1');
-    expect(warnings).toEqual([
-      {
-        message: 'Coerced key sentinel -1 to null for D0',
-        source: { fileName: 'sentinel.wld', startLine: 9 },
-        recordType: RecordType.World,
-        vnum: 5,
-      },
-      {
-        message: 'Coerced target room sentinel -1 to null for D0',
-        source: { fileName: 'sentinel.wld', startLine: 9 },
-        recordType: RecordType.World,
-        vnum: 5,
-      },
-      {
-        message: 'Coerced key sentinel 65535 to null for D1',
-        source: { fileName: 'sentinel.wld', startLine: 13 },
-        recordType: RecordType.World,
-        vnum: 5,
-      },
-      {
-        message: 'Coerced target room sentinel 0 to null for D1',
-        source: { fileName: 'sentinel.wld', startLine: 13 },
-        recordType: RecordType.World,
-        vnum: 5,
-      },
-    ]);
+    // The C loader maps these sentinels silently, so they are debug-level, not warnings.
+    expect(debug).toHaveBeenCalledWith('Coerced key sentinel -1 to null for room #5 D0');
+    expect(debug).toHaveBeenCalledWith('Coerced target room sentinel -1 to null for room #5 D0');
+    expect(debug).toHaveBeenCalledWith('Coerced key sentinel 65535 to null for room #5 D1');
+    expect(debug).toHaveBeenCalledWith('Coerced target room sentinel 0 to null for room #5 D1');
+    expect(warn).not.toHaveBeenCalled();
+    expect(warnings).toEqual([]);
     expect(record.directions.map((direction) => [direction.keyVnum, direction.toRoomVnum])).toEqual(
       [
         [null, null],

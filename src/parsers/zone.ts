@@ -61,8 +61,14 @@ type ZoneCommandParseResult =
   | { readonly kind: 'end' }
   | { readonly kind: 'skip' };
 
-/** Zone commands whose source form contains if_flag plus three numeric arguments. */
-const THREE_ARG_COMMANDS = new Set(['M', 'O', 'G', 'E', 'P', 'D', 'T']);
+/**
+ * Zone commands that require if_flag plus exactly three numeric arguments (four numbers total).
+ *
+ * tbaMUD's `G` command is handled separately because CircleMUD uses only two numeric arguments
+ * after if_flag (three numbers total), while tbaMUD added a third argument (which is unused at
+ * reset time). The parser accepts both forms when it encounters a `G` command.
+ */
+const THREE_ARG_COMMANDS = new Set(['M', 'O', 'E', 'P', 'D', 'T']);
 
 /**
  * Reads and parses one `.zon` file from disk.
@@ -87,9 +93,10 @@ export function parseZoneFile(fileName: string, options: ParseOptions = {}): Zon
 /**
  * Parses zone content from a string or Buffer.
  *
- * Supports both the old four-field numeric header and the newer tbaMUD ten-field header with four
- * zone flag bitvectors and min/max level gates. Command parsing follows `load_zones()` in
- * `data/tbamud/src/db.c` and requires an `S` or `$` terminator before EOF.
+ * Supports both the CircleMUD four-field numeric header (no builders line, `G` command with
+ * three arguments) and the tbaMUD ten-field header with four zone flag bitvectors, min/max level
+ * gates, and four-argument `G` commands. Format is auto-detected by structure. Command parsing
+ * follows `load_zones()` in `data/tbamud/src/db.c` and requires an `S` or `$` terminator.
  *
  * @param input - Zone file contents as a string or Buffer.
  * @param options - Parser options controlling encoding, source names, warnings, and logging.
@@ -185,15 +192,6 @@ function parseZoneHeader(reader: MudReader, context: ZoneParserContext): ZoneHea
   let firstCommandLine: SourceLine | undefined;
 
   if (numbers === null) {
-    if (context.strict) {
-      fail(
-        'Expected zone numeric line',
-        context,
-        sourceForLine(context, numericLine.startLine),
-        vnum,
-      );
-    }
-
     const fallbackNumbers = parseZoneNumbers(rawName, true);
 
     if (fallbackNumbers === null) {
@@ -205,12 +203,10 @@ function parseZoneHeader(reader: MudReader, context: ZoneParserContext): ZoneHea
       );
     }
 
-    emitWarning(
-      'Applied zone header fallback for missing builders line',
-      context,
-      sourceForLine(context, nameLine.startLine),
-      vnum,
-    );
+    // CircleMUD zones omit the builders line entirely, so this fallback is the normal path for
+    // that format rather than a recoverable problem. The C loader fixes it up silently
+    // (data/tbamud/src/db.c), so log at debug level only.
+    context.logger.debug(`Applied zone header fallback for missing builders line in zone #${vnum}`);
 
     numbers = fallbackNumbers;
     builders = 'None.';
@@ -370,6 +366,13 @@ function parseZoneCommandLine(
       command: zoneCommand(command, values[0], values.slice(1), [], source, comment),
     };
   }
+  if (command === 'G') {
+    const values = parseGCommandIntegers(commandText, context, source, vnum);
+    return {
+      kind: 'command',
+      command: zoneCommand(command, values[0], values.slice(1), [], source, comment),
+    };
+  }
   if (command === 'R') {
     const values = parseCommandIntegers(commandText, 3, command, context, source, vnum);
     return {
@@ -497,6 +500,59 @@ function parseCommandIntegers(
     }
 
     values.push(value);
+  }
+
+  return values;
+}
+
+/**
+ * Parses `G` (give object to character) command integers.
+ *
+ * CircleMUD uses three numbers total (`if_flag obj_vnum max`), while tbaMUD added a fourth
+ * argument (`arg3`) which is unused at reset time (`data/tbamud/src/db.c:2674`). Both forms are
+ * accepted: the third argument (arg2) is always the max-load count, and the optional fourth
+ * argument is consumed and discarded when present.
+ *
+ * @param text - Command text after the leading `G` character and comment extraction.
+ * @param context - Normalized parser context.
+ * @param source - Source span for the command line.
+ * @param vnum - Zone VNUM used for error context.
+ * @returns Parsed integer values: [if_flag, arg1, arg2] or [if_flag, arg1, arg2, arg3].
+ * @throws ParseError if fewer than three numeric fields are found.
+ */
+function parseGCommandIntegers(
+  text: string,
+  context: ZoneParserContext,
+  source: SourceSpan,
+  vnum: Vnum,
+): number[] {
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
+
+  // Require at least 3 numeric fields (CircleMUD format: if_flag obj_vnum max).
+  if (tokens.length < 3) {
+    fail('Expected at least 3 numeric fields for G zone command', context, source, vnum);
+  }
+
+  const values: number[] = [];
+
+  for (let index = 0; index < Math.min(tokens.length, 4); index += 1) {
+    const token = tokens[index];
+    const value = parseTokenInteger(token);
+
+    if (value === null) {
+      // Stop at the first non-numeric token (e.g. a trailing comment without a tab).
+      break;
+    }
+
+    values.push(value);
+    if (values.length === 4) {
+      // tbaMUD format consumed — arg3 is carried but unused at reset time.
+      break;
+    }
+  }
+
+  if (values.length < 3) {
+    fail('Expected at least 3 numeric fields for G zone command', context, source, vnum);
   }
 
   return values;
