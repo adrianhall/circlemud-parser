@@ -272,3 +272,147 @@ describe('getIndexName', () => {
     expect(getIndexName({ indexName: 42 })).toBe('index');
   });
 });
+
+// ---------------------------------------------------------------------------
+// SQL-specific option validation
+// ---------------------------------------------------------------------------
+
+describe('parseArgs — sql format and related options', () => {
+  it('accepts -f sql with -O and produces defaults', () => {
+    const result = parseArgs(['-O', 'migrations', '-f', 'sql', 'data/world']);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.options.format).toBe('sql');
+    expect(result.options.startNumber).toBe(9000);
+    expect(result.options.emitCreateTables).toBeUndefined();
+  });
+
+  it('accepts --start-number with -f sql', () => {
+    const result = parseArgs([
+      '-O',
+      'migrations',
+      '-f',
+      'sql',
+      '--start-number',
+      '1000',
+      'data/world',
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.options.startNumber).toBe(1000);
+  });
+
+  it('accepts --start-number=0', () => {
+    const result = parseArgs(['-O', 'migrations', '-f', 'sql', '--start-number=0', 'data/world']);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.options.startNumber).toBe(0);
+  });
+
+  it('accepts --emit-create-tables with -f sql', () => {
+    const result = parseArgs([
+      '-O',
+      'migrations',
+      '-f',
+      'sql',
+      '--emit-create-tables',
+      '0001_world.sql',
+      'data/world',
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.options.emitCreateTables).toBe('0001_world.sql');
+  });
+
+  it('rejects -f sql without -O (output directory required)', () => {
+    const result = parseArgs(['-f', 'sql', 'data/world']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain('--output-directory');
+  });
+
+  it('rejects --start-number with non-sql format', () => {
+    const result = parseArgs(['-f', 'json', '--start-number', '1000', 'data/world']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain('--start-number');
+  });
+
+  it('rejects --emit-create-tables with non-sql format', () => {
+    const result = parseArgs(['-f', 'json', '--emit-create-tables', 'schema.sql', 'data/world']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain('--emit-create-tables');
+  });
+
+  it('rejects --start-number with a negative value', () => {
+    const result = parseArgs(['-O', 'migrations', '-f', 'sql', '--start-number=-1', 'data/world']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain('non-negative integer');
+  });
+
+  it('rejects --start-number with a non-integer value', () => {
+    const result = parseArgs(['-O', 'migrations', '-f', 'sql', '--start-number=3.5', 'data/world']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain('non-negative integer');
+  });
+
+  it('rejects --start-number with a non-numeric string', () => {
+    const result = parseArgs(['-O', 'migrations', '-f', 'sql', '--start-number=abc', 'data/world']);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain('non-negative integer');
+  });
+
+  it('rejects --emit-create-tables with a path separator in the value', () => {
+    const result = parseArgs([
+      '-O',
+      'migrations',
+      '-f',
+      'sql',
+      '--emit-create-tables=sub/schema.sql',
+      'data/world',
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain('path separators');
+  });
+
+  it('rejects --emit-create-tables with a backslash separator', () => {
+    const result = parseArgs([
+      '-O',
+      'migrations',
+      '-f',
+      'sql',
+      '--emit-create-tables=sub\\schema.sql',
+      'data/world',
+    ]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.exitCode).toBe(2);
+    expect(result.message).toContain('path separators');
+  });
+
+  it('startNumber defaults to 9000 when not provided', () => {
+    const result = parseArgs(['-O', 'out', '-f', 'sql', 'data/world']);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.options.startNumber).toBe(9000);
+  });
+
+  it('emitCreateTables defaults to undefined when not provided', () => {
+    const result = parseArgs(['-O', 'out', '-f', 'sql', 'data/world']);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.options.emitCreateTables).toBeUndefined();
+  });
+});

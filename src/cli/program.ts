@@ -33,12 +33,17 @@ export function buildProgram(write?: (str: string) => void): Command {
 
   program
     .name('circlemud-parser')
-    .description('Parse CircleMUD/TbaMUD world data files into JSON, YAML, or TOML')
+    .description('Parse CircleMUD/TbaMUD world data files into JSON, YAML, TOML, or SQL')
     .version(VERSION)
     .exitOverride()
     .argument('<input>', 'Input file, index file, or world directory')
-    .option('-O, --output-directory <dir>', 'Output directory')
-    .option('-f, --format <fmt>', 'Output format: json|yaml|toml', 'json')
+    .option('-O, --output-directory <dir>', 'Output directory (required for --format sql)')
+    .option('-f, --format <fmt>', 'Output format: json|yaml|toml|sql', 'json')
+    .option('--start-number <n>', 'First migration number for SQL output (default: 9000)')
+    .option(
+      '--emit-create-tables <file>',
+      'Also emit a DDL schema file with this filename (SQL only)',
+    )
     .option('-l, --min-log-level <level>', 'Minimum log level: debug|info|warn|error')
     .option('-q, --quiet', 'Suppress all log output')
     .option('-v, --verbose', 'Set log level to debug')
@@ -93,7 +98,66 @@ export function parseArgs(argv: string[]): ParseResult {
     return {
       ok: false,
       exitCode: 2,
-      message: `Invalid format '${format}'. Use json, yaml, or toml.`,
+      message: `Invalid format '${format}'. Use json, yaml, toml, or sql.`,
+    };
+  }
+
+  // --- SQL-specific option validation ----------------------------------
+  const rawStartNumber = rawOpts['startNumber'] as string | undefined;
+  const rawEmitCreateTables = rawOpts['emitCreateTables'] as string | undefined;
+
+  // --start-number and --emit-create-tables are only valid with -f sql
+  if (rawStartNumber !== undefined && format !== 'sql') {
+    return {
+      ok: false,
+      exitCode: 2,
+      message: '--start-number is only valid with --format sql.',
+    };
+  }
+  if (rawEmitCreateTables !== undefined && format !== 'sql') {
+    return {
+      ok: false,
+      exitCode: 2,
+      message: '--emit-create-tables is only valid with --format sql.',
+    };
+  }
+
+  // Validate --start-number: must be a non-negative integer
+  let startNumber = 9000;
+  if (rawStartNumber !== undefined) {
+    const parsed = Number(rawStartNumber);
+    if (!Number.isInteger(parsed) || parsed < 0) {
+      return {
+        ok: false,
+        exitCode: 2,
+        message: `--start-number must be a non-negative integer, got '${rawStartNumber}'.`,
+      };
+    }
+    startNumber = parsed;
+  }
+
+  // Validate --emit-create-tables: non-empty filename, no path separators
+  if (rawEmitCreateTables !== undefined) {
+    if (
+      rawEmitCreateTables.length === 0 ||
+      rawEmitCreateTables.includes('/') ||
+      rawEmitCreateTables.includes('\\')
+    ) {
+      return {
+        ok: false,
+        exitCode: 2,
+        message: `--emit-create-tables must be a non-empty filename without path separators, got '${rawEmitCreateTables}'.`,
+      };
+    }
+  }
+
+  // In SQL mode, -O/--output-directory is required
+  const outputDirectory = rawOpts['outputDirectory'] as string | undefined;
+  if (format === 'sql' && outputDirectory === undefined) {
+    return {
+      ok: false,
+      exitCode: 2,
+      message: '--output-directory (-O) is required when --format sql is selected.',
     };
   }
 
@@ -158,7 +222,7 @@ export function parseArgs(argv: string[]): ParseResult {
     ok: true,
     options: {
       input,
-      outputDirectory: rawOpts['outputDirectory'] as string | undefined,
+      outputDirectory,
       format,
       minLogLevel,
       quiet,
@@ -169,6 +233,8 @@ export function parseArgs(argv: string[]): ParseResult {
       overwrite,
       skipIfMissing: rawOpts['skipIfMissing'] !== false,
       indexName: getIndexName(rawOpts),
+      startNumber,
+      emitCreateTables: rawEmitCreateTables,
     },
   };
 }

@@ -31,6 +31,8 @@ function makeOptions(overrides: Partial<CliOptions> = {}): CliOptions {
     overwrite: true,
     skipIfMissing: false,
     indexName: 'index',
+    startNumber: 9000,
+    emitCreateTables: undefined,
     ...overrides,
   };
 }

@@ -159,6 +159,8 @@ describe('logMessageIfAvailable', () => {
           overwrite: false,
           skipIfMissing: true,
           indexName: 'index',
+          startNumber: 9000,
+          emitCreateTables: undefined,
         },
       },
       deps,

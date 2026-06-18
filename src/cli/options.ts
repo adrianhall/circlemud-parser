@@ -2,7 +2,7 @@
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 /** Supported output formats. */
-export type OutputFormat = 'json' | 'yaml' | 'toml';
+export type OutputFormat = 'json' | 'yaml' | 'toml' | 'sql';
 
 /** Parsed and validated CLI options. */
 export interface CliOptions {
@@ -41,6 +41,18 @@ export interface CliOptions {
 
   /** Index file name to look for in world subdirectories. */
   readonly indexName: string;
+
+  /**
+   * First migration number when `format === 'sql'`. Each record type is assigned
+   * a fixed offset from this value. Default `9000`.
+   */
+  readonly startNumber: number;
+
+  /**
+   * When set, also emit a DDL schema migration file with this exact filename into
+   * the output directory. Only valid when `format === 'sql'`.
+   */
+  readonly emitCreateTables: string | undefined;
 }
 
 /** Log level priority for filtering (higher value = more severe). */
@@ -60,7 +72,7 @@ export function isLevelEnabled(level: LogLevel, minLevel: LogLevel): boolean {
 export const VALID_LOG_LEVELS: readonly LogLevel[] = ['debug', 'info', 'warn', 'error'];
 
 /** Valid output format strings for argument validation. */
-export const VALID_FORMATS: readonly OutputFormat[] = ['json', 'yaml', 'toml'];
+export const VALID_FORMATS: readonly OutputFormat[] = ['json', 'yaml', 'toml', 'sql'];
 
 /** Type guard for valid log level strings. */
 export function isLogLevel(value: string): value is LogLevel {

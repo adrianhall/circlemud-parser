@@ -1,4 +1,5 @@
-import { bitvectorToAsciiFlags, resolveFlagNames } from '../../flags.js';
+import { bitvectorToAsciiFlags, resolveFlagNames, resolveOrdinalName } from '../../flags.js';
+export { resolveOrdinalName };
 import type { BitVector, FlagTable, SourceSpan, Vnum } from '../../types.js';
 import { fail } from './diagnostics.js';
 import type { ParserContext } from './context.js';
@@ -42,10 +43,4 @@ export function resolveBitvector(
       error,
     );
   }
-}
-
-/** Resolves an ordinal table entry, preserving unknown values. */
-export function resolveOrdinalName(value: number, table: FlagTable): string {
-  const name = table[value];
-  return name === undefined || name === '\n' || name === '\0' ? `UNKNOWN_${value}` : name;
 }
