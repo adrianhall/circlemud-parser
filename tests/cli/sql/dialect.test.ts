@@ -10,6 +10,10 @@ import {
   renderSqlValue,
 } from '../../../src/cli/sql/dialects/d1-sqlite.js';
 import { packStatements, getDialect } from '../../../src/cli/sql/dialect.js';
+import { RecordType } from '../../../src/types.js';
+
+/** Convenience: a set containing every record type (full schema). */
+const ALL_TYPES = new Set(Object.values(RecordType));
 
 // ---------------------------------------------------------------------------
 // D1 SQLite — literal escaping
@@ -84,8 +88,8 @@ describe('D1SqliteDialect', () => {
     expect(D1SqliteDialect.batchTargetBytes).toBe(60_000);
   });
 
-  it('creates tables DDL containing key table names', () => {
-    const ddl = D1SqliteDialect.createTables();
+  it('creates tables DDL containing key table names when all types active', () => {
+    const ddl = D1SqliteDialect.createTables(ALL_TYPES);
     expect(ddl).toContain('CREATE TABLE IF NOT EXISTS zones');
     expect(ddl).toContain('CREATE TABLE IF NOT EXISTS zone_commands');
     expect(ddl).toContain('CREATE TABLE IF NOT EXISTS rooms');
@@ -101,13 +105,32 @@ describe('D1SqliteDialect', () => {
     expect(ddl).toContain('CREATE TABLE IF NOT EXISTS quests');
   });
 
+  it('omits tables for absent record types', () => {
+    // Only zones + rooms active — no shops, triggers, or quests
+    const active = new Set([RecordType.Zone, RecordType.World]);
+    const ddl = D1SqliteDialect.createTables(active);
+    expect(ddl).toContain('CREATE TABLE IF NOT EXISTS zones');
+    expect(ddl).toContain('CREATE TABLE IF NOT EXISTS rooms');
+    expect(ddl).not.toContain('CREATE TABLE IF NOT EXISTS shops');
+    expect(ddl).not.toContain('CREATE TABLE IF NOT EXISTS shop_buy_types');
+    expect(ddl).not.toContain('CREATE TABLE IF NOT EXISTS triggers');
+    expect(ddl).not.toContain('CREATE TABLE IF NOT EXISTS quests');
+  });
+
+  it('omitting shops also omits shop_buy_types (child table follows parent)', () => {
+    const active = new Set([RecordType.Zone, RecordType.World, RecordType.Mobile]);
+    const ddl = D1SqliteDialect.createTables(active);
+    expect(ddl).not.toContain('CREATE TABLE IF NOT EXISTS shops');
+    expect(ddl).not.toContain('CREATE TABLE IF NOT EXISTS shop_buy_types');
+  });
+
   it('DDL contains ON DELETE CASCADE for owned child tables', () => {
-    const ddl = D1SqliteDialect.createTables();
+    const ddl = D1SqliteDialect.createTables(ALL_TYPES);
     expect(ddl).toContain('ON DELETE CASCADE');
   });
 
   it('every table in the DDL has created_at and updated_at columns', () => {
-    const ddl = D1SqliteDialect.createTables();
+    const ddl = D1SqliteDialect.createTables(ALL_TYPES);
     const tableNames = [
       'zones',
       'zone_commands',
@@ -137,7 +160,7 @@ describe('D1SqliteDialect', () => {
   });
 
   it('created_at and updated_at use STRFTIME millisecond default', () => {
-    const ddl = D1SqliteDialect.createTables();
+    const ddl = D1SqliteDialect.createTables(ALL_TYPES);
     expect(ddl).toContain("STRFTIME('%Y-%m-%dT%H:%M:%f', 'NOW')");
   });
 

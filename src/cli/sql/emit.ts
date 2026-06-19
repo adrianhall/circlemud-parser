@@ -197,11 +197,18 @@ export function emitSql(
 
   const files: SqlFile[] = [];
 
-  // Optionally emit the DDL schema file first.
+  // Determine which record types have at least one record.
+  const activeTypes = new Set<RecordType>(
+    RECORD_TYPE_OFFSETS.map(({ type }) => type).filter(
+      (type) => (grouped.get(type) ?? []).length > 0,
+    ),
+  );
+
+  // Optionally emit the DDL schema file first, restricted to active types.
   if (emitCreateTables !== undefined && emitCreateTables !== '') {
     files.push({
       filename: emitCreateTables,
-      content: dialect.createTables(),
+      content: dialect.createTables(activeTypes),
     });
   }
 

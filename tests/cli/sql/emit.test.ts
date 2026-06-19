@@ -94,7 +94,22 @@ describe('emitSql — file naming and numbering', () => {
     expect(filenames).not.toContain('9002_object_data.sql');
   });
 
-  it('emits DDL schema file when emitCreateTables is set', () => {
+  it('emits DDL schema file when emitCreateTables is set (with zone data)', () => {
+    ulidCount = 0;
+    const grouped: Map<RecordType, readonly MudRecord[]> = new Map([
+      [RecordType.Zone, [makeZone(30, 3000, 3099)]],
+    ]);
+    const files = emitSql(grouped, {
+      ...BASE_OPTIONS,
+      emitCreateTables: '0001_world.sql',
+    });
+    // schema file + zone data file
+    expect(files).toHaveLength(2);
+    expect(files[0]!.filename).toBe('0001_world.sql');
+    expect(files[0]!.content).toContain('CREATE TABLE IF NOT EXISTS zones');
+  });
+
+  it('DDL schema file is empty when grouped map is empty (no active types)', () => {
     ulidCount = 0;
     const files = emitSql(new Map(), {
       ...BASE_OPTIONS,
@@ -102,7 +117,28 @@ describe('emitSql — file naming and numbering', () => {
     });
     expect(files).toHaveLength(1);
     expect(files[0]!.filename).toBe('0001_world.sql');
-    expect(files[0]!.content).toContain('CREATE TABLE IF NOT EXISTS zones');
+    // No active types → DDL should be empty (no tables to create)
+    expect(files[0]!.content).toBe('');
+  });
+
+  it('DDL omits tables for absent types (e.g. quests when none present)', () => {
+    ulidCount = 0;
+    const grouped: Map<RecordType, readonly MudRecord[]> = new Map([
+      [RecordType.Zone, [makeZone(30, 3000, 3099)]],
+      [RecordType.World, [makeRoom(3050)]],
+      // No Quest, Trigger, Shop, Mobile, Object records
+    ]);
+    const files = emitSql(grouped, {
+      ...BASE_OPTIONS,
+      emitCreateTables: '0001_world.sql',
+    });
+    const schema = files.find((f) => f.filename === '0001_world.sql')!;
+    expect(schema.content).toContain('CREATE TABLE IF NOT EXISTS zones');
+    expect(schema.content).toContain('CREATE TABLE IF NOT EXISTS rooms');
+    expect(schema.content).not.toContain('CREATE TABLE IF NOT EXISTS quests');
+    expect(schema.content).not.toContain('CREATE TABLE IF NOT EXISTS triggers');
+    expect(schema.content).not.toContain('CREATE TABLE IF NOT EXISTS shops');
+    expect(schema.content).not.toContain('CREATE TABLE IF NOT EXISTS mobiles');
   });
 
   it('DDL file comes before data files', () => {

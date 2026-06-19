@@ -9,6 +9,7 @@
  */
 
 import { registerDialect } from '../dialect.js';
+import { RecordType } from '../dialect.js';
 import type { SqlDialect, SqlValue } from '../dialect.js';
 
 const MAX_STATEMENT_BYTES = 100_000;
@@ -22,8 +23,16 @@ const BATCH_TARGET_BYTES = 60_000;
  */
 const TIMESTAMP_DEFAULT = `(STRFTIME('%Y-%m-%dT%H:%M:%f', 'NOW'))`;
 
-/** DDL schema for the full world database. */
-const DDL = `-- Zones (builders and flags intentionally excluded)
+/**
+ * DDL sections keyed by `RecordType`.  Each section contains all the
+ * `CREATE TABLE` and `CREATE INDEX` statements for that record type's tables.
+ * Zones always anchor the schema; every other type is only emitted when its
+ * `RecordType` is present in the active set.
+ */
+const DDL_SECTIONS: ReadonlyMap<RecordType, string> = new Map([
+  [
+    RecordType.Zone,
+    `-- Zones (builders and flags intentionally excluded)
 CREATE TABLE IF NOT EXISTS zones (
   vnum        INTEGER PRIMARY KEY,
   name        TEXT NOT NULL,
@@ -53,8 +62,11 @@ CREATE TABLE IF NOT EXISTS zone_commands (
   UNIQUE (zone_vnum, ordinal)
 );
 CREATE INDEX IF NOT EXISTS idx_zone_commands_zone ON zone_commands (zone_vnum);
-
--- Rooms
+`,
+  ],
+  [
+    RecordType.World,
+    `-- Rooms
 CREATE TABLE IF NOT EXISTS rooms (
   vnum          INTEGER PRIMARY KEY,
   zone_vnum     INTEGER REFERENCES zones(vnum) ON DELETE CASCADE,
@@ -96,8 +108,11 @@ CREATE TABLE IF NOT EXISTS room_extra_descriptions (
   UNIQUE (room_vnum, ordinal)
 );
 CREATE INDEX IF NOT EXISTS idx_room_xdesc_room ON room_extra_descriptions (room_vnum);
-
--- Objects
+`,
+  ],
+  [
+    RecordType.Object,
+    `-- Objects
 CREATE TABLE IF NOT EXISTS objects (
   vnum               INTEGER PRIMARY KEY,
   zone_vnum          INTEGER REFERENCES zones(vnum) ON DELETE CASCADE,
@@ -146,8 +161,11 @@ CREATE TABLE IF NOT EXISTS object_affects (
   UNIQUE (object_vnum, ordinal)
 );
 CREATE INDEX IF NOT EXISTS idx_object_affects_object ON object_affects (object_vnum);
-
--- Mobiles (stats + enhanced flattened)
+`,
+  ],
+  [
+    RecordType.Mobile,
+    `-- Mobiles (stats + enhanced flattened)
 CREATE TABLE IF NOT EXISTS mobiles (
   vnum               INTEGER PRIMARY KEY,
   zone_vnum          INTEGER REFERENCES zones(vnum) ON DELETE CASCADE,
@@ -188,8 +206,11 @@ CREATE TABLE IF NOT EXISTS mobiles (
   updated_at         TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT}
 );
 CREATE INDEX IF NOT EXISTS idx_mobiles_zone ON mobiles (zone_vnum);
-
--- Shops
+`,
+  ],
+  [
+    RecordType.Shop,
+    `-- Shops
 CREATE TABLE IF NOT EXISTS shops (
   vnum                INTEGER PRIMARY KEY,
   zone_vnum           INTEGER REFERENCES zones(vnum) ON DELETE CASCADE,
@@ -230,8 +251,11 @@ CREATE TABLE IF NOT EXISTS shop_buy_types (
   UNIQUE (shop_vnum, ordinal)
 );
 CREATE INDEX IF NOT EXISTS idx_shop_buy_types_shop ON shop_buy_types (shop_vnum);
-
--- Triggers
+`,
+  ],
+  [
+    RecordType.Trigger,
+    `-- Triggers
 CREATE TABLE IF NOT EXISTS triggers (
   vnum          INTEGER PRIMARY KEY,
   zone_vnum     INTEGER REFERENCES zones(vnum) ON DELETE CASCADE,
@@ -246,8 +270,11 @@ CREATE TABLE IF NOT EXISTS triggers (
   updated_at    TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT}
 );
 CREATE INDEX IF NOT EXISTS idx_triggers_zone ON triggers (zone_vnum);
-
--- Quests
+`,
+  ],
+  [
+    RecordType.Quest,
+    `-- Quests
 CREATE TABLE IF NOT EXISTS quests (
   vnum               INTEGER PRIMARY KEY,
   zone_vnum          INTEGER REFERENCES zones(vnum) ON DELETE CASCADE,
@@ -279,7 +306,9 @@ CREATE TABLE IF NOT EXISTS quests (
 );
 CREATE INDEX IF NOT EXISTS idx_quests_questmaster ON quests (questmaster_vnum);
 CREATE INDEX IF NOT EXISTS idx_quests_zone ON quests (zone_vnum);
-`;
+`,
+  ],
+]);
 
 /** Escapes a string value for inclusion in a SQL single-quoted literal. */
 export function escapeSqlString(value: string): string {
@@ -299,8 +328,16 @@ const D1SqliteDialect: SqlDialect = {
   maxStatementBytes: MAX_STATEMENT_BYTES,
   batchTargetBytes: BATCH_TARGET_BYTES,
 
-  createTables(): string {
-    return DDL;
+  createTables(activeTypes: ReadonlySet<RecordType>): string {
+    // Emit sections in canonical record-type order, skipping absent types.
+    // Zones are always included when present; they anchor the FK hierarchy.
+    const parts: string[] = [];
+    for (const [type, section] of DDL_SECTIONS) {
+      if (activeTypes.has(type)) {
+        parts.push(section);
+      }
+    }
+    return parts.join('\n');
   },
 
   insertPrefix(table: string, columns: readonly string[]): string {

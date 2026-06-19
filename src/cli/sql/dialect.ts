@@ -7,6 +7,9 @@
  * the only entry shipped in this version is `'d1-sqlite'`.
  */
 
+import { RecordType } from '../../types.js';
+export { RecordType };
+
 /** A value that can appear in a SQL row tuple. */
 export type SqlValue = string | number | null;
 
@@ -39,10 +42,15 @@ export interface SqlDialect {
   readonly batchTargetBytes: number;
 
   /**
-   * Returns the complete DDL string: `CREATE TABLE IF NOT EXISTS` and
-   * `CREATE INDEX IF NOT EXISTS` statements for all tables.
+   * Returns the DDL string — `CREATE TABLE IF NOT EXISTS` and
+   * `CREATE INDEX IF NOT EXISTS` statements — restricted to the record types
+   * present in the dataset.
+   *
+   * Only tables that belong to a type in `activeTypes` are emitted.  This
+   * prevents empty table definitions from appearing in the schema migration
+   * when a corpus (e.g. CircleMUD 3.1) has no quests or triggers.
    */
-  createTables(): string;
+  createTables(activeTypes: ReadonlySet<RecordType>): string;
 
   /**
    * Returns the opening fragment of a multi-row INSERT statement for `table`.
