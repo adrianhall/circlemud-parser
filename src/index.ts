@@ -7,6 +7,7 @@ export {
   bitvectorToAsciiFlags,
   resolveFlagNames,
   resolveFlagSetNames,
+  resolveOrdinalName,
 } from './flags.js';
 export {
   MudReader,

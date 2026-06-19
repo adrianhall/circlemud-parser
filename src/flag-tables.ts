@@ -302,6 +302,67 @@ export const ITEM_TYPES: FlagTable = [
   'FOUNTAIN',
 ];
 
+/**
+ * Room sector type descriptions from `data/tbamud/src/constants.c` `sector_types[]`.
+ *
+ * @remarks Index positions must remain aligned with the C source table.
+ */
+export const SECTOR_TYPES: FlagTable = [
+  'Inside',
+  'City',
+  'Field',
+  'Forest',
+  'Hills',
+  'Mountains',
+  'Water (Swim)',
+  'Water (No Swim)',
+  'In Flight',
+  'Underwater',
+];
+
+/**
+ * Room exit direction names from `data/tbamud/src/constants.c` `dirs[]`.
+ *
+ * @remarks Index positions must remain aligned with the C source table.
+ * Diagonal directions (indices 6–9) are only used when CONFIG_DIAGONAL_DIRS is set.
+ */
+export const DIRECTIONS: FlagTable = [
+  'north',
+  'east',
+  'south',
+  'west',
+  'up',
+  'down',
+  'northwest',
+  'northeast',
+  'southeast',
+  'southwest',
+];
+
+/**
+ * Mobile/NPC position type descriptions from `data/tbamud/src/constants.c` `position_types[]`.
+ *
+ * @remarks Index positions must remain aligned with the C source table.
+ */
+export const POSITION_TYPES: FlagTable = [
+  'Dead',
+  'Mortally wounded',
+  'Incapacitated',
+  'Stunned',
+  'Sleeping',
+  'Resting',
+  'Sitting',
+  'Fighting',
+  'Standing',
+];
+
+/**
+ * Character sex/gender descriptions from `data/tbamud/src/constants.c` `genders[]`.
+ *
+ * @remarks Index positions must remain aligned with the C source table.
+ */
+export const GENDERS: FlagTable = ['neutral', 'male', 'female'];
+
 /** Object affect apply descriptions from `data/tbamud/src/constants.c` `apply_types[]`. */
 export const APPLY_TYPES: FlagTable = [
   'NONE',

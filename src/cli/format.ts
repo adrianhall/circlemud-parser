@@ -50,6 +50,10 @@ export function serializeRecords(
       const cleaned = stripNulls({ records }) as Record<string, unknown>;
       return tomlStringify(cleaned);
     }
+    case 'sql':
+      // SQL output is handled by the dedicated SQL emitter pipeline; this path
+      // is not called for sql format, but the case is required for exhaustiveness.
+      return '';
   }
 }
 
@@ -62,5 +66,7 @@ export function extensionForFormat(format: OutputFormat): string {
       return '.yaml';
     case 'toml':
       return '.toml';
+    case 'sql':
+      return '.sql';
   }
 }

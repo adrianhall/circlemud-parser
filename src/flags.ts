@@ -1,5 +1,20 @@
 import type { BitVector, BitVectorSet, FlagTable } from './types.js';
 
+/**
+ * Resolves an ordinal value to its public name from a table.
+ *
+ * Returns `UNKNOWN_<value>` for values that are out-of-range or point at sentinel
+ * entries (`'\n'`, `'\0'`), so no information is silently lost.
+ *
+ * @param value - Non-negative ordinal index.
+ * @param table - Name table indexed by ordinal.
+ * @returns Resolved name or `UNKNOWN_<value>` fallback.
+ */
+export function resolveOrdinalName(value: number, table: FlagTable): string {
+  const name = table[value];
+  return name === undefined || name === '\n' || name === '\0' ? `UNKNOWN_${value}` : name;
+}
+
 function assertBitVector(value: BitVector): void {
   if (!Number.isInteger(value) || value < 0) {
     throw new RangeError(`Bitvector values must be non-negative integers: ${value}`);
