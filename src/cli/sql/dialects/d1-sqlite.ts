@@ -14,6 +14,14 @@ import type { SqlDialect, SqlValue } from '../dialect.js';
 const MAX_STATEMENT_BYTES = 100_000;
 const BATCH_TARGET_BYTES = 60_000;
 
+/**
+ * ISO-8601 timestamp expression with millisecond resolution, used as the
+ * DEFAULT for `created_at` and `updated_at` on every table.
+ *
+ * Produces strings of the form `2026-06-19T20:05:01.234`.
+ */
+const TIMESTAMP_DEFAULT = `(STRFTIME('%Y-%m-%dT%H:%M:%f', 'NOW'))`;
+
 /** DDL schema for the full world database. */
 const DDL = `-- Zones (builders and flags intentionally excluded)
 CREATE TABLE IF NOT EXISTS zones (
@@ -25,7 +33,9 @@ CREATE TABLE IF NOT EXISTS zones (
   reset_mode  INTEGER NOT NULL,
   min_level   INTEGER,
   max_level   INTEGER,
-  source      TEXT
+  source      TEXT,
+  created_at  TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at  TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT}
 );
 
 CREATE TABLE IF NOT EXISTS zone_commands (
@@ -38,6 +48,8 @@ CREATE TABLE IF NOT EXISTS zone_commands (
   string_args TEXT NOT NULL CHECK (json_valid(string_args)),
   comment     TEXT,
   source      TEXT,
+  created_at  TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at  TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
   UNIQUE (zone_vnum, ordinal)
 );
 CREATE INDEX IF NOT EXISTS idx_zone_commands_zone ON zone_commands (zone_vnum);
@@ -51,7 +63,9 @@ CREATE TABLE IF NOT EXISTS rooms (
   room_flags    TEXT NOT NULL CHECK (json_valid(room_flags)),
   sector_type   TEXT NOT NULL,
   trigger_vnums TEXT NOT NULL CHECK (json_valid(trigger_vnums)),
-  source        TEXT
+  source        TEXT,
+  created_at    TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at    TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT}
 );
 CREATE INDEX IF NOT EXISTS idx_rooms_zone ON rooms (zone_vnum);
 
@@ -64,6 +78,8 @@ CREATE TABLE IF NOT EXISTS room_exits (
   exit_flags   TEXT NOT NULL CHECK (json_valid(exit_flags)),
   key_vnum     INTEGER,
   to_room_vnum INTEGER,
+  created_at   TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at   TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
   UNIQUE (room_vnum, direction)
 );
 CREATE INDEX IF NOT EXISTS idx_room_exits_room    ON room_exits (room_vnum);
@@ -75,6 +91,8 @@ CREATE TABLE IF NOT EXISTS room_extra_descriptions (
   ordinal     INTEGER NOT NULL,
   keywords    TEXT NOT NULL CHECK (json_valid(keywords)),
   description TEXT,
+  created_at  TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at  TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
   UNIQUE (room_vnum, ordinal)
 );
 CREATE INDEX IF NOT EXISTS idx_room_xdesc_room ON room_extra_descriptions (room_vnum);
@@ -98,7 +116,9 @@ CREATE TABLE IF NOT EXISTS objects (
   level              INTEGER NOT NULL,
   timer              INTEGER NOT NULL,
   trigger_vnums      TEXT NOT NULL CHECK (json_valid(trigger_vnums)),
-  source             TEXT
+  source             TEXT,
+  created_at         TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at         TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT}
 );
 CREATE INDEX IF NOT EXISTS idx_objects_type ON objects (object_type);
 CREATE INDEX IF NOT EXISTS idx_objects_zone ON objects (zone_vnum);
@@ -109,6 +129,8 @@ CREATE TABLE IF NOT EXISTS object_extra_descriptions (
   ordinal     INTEGER NOT NULL,
   keywords    TEXT NOT NULL CHECK (json_valid(keywords)),
   description TEXT,
+  created_at  TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at  TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
   UNIQUE (object_vnum, ordinal)
 );
 CREATE INDEX IF NOT EXISTS idx_object_xdesc_object ON object_extra_descriptions (object_vnum);
@@ -119,6 +141,8 @@ CREATE TABLE IF NOT EXISTS object_affects (
   ordinal     INTEGER NOT NULL,
   location    TEXT NOT NULL,
   modifier    INTEGER NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at  TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
   UNIQUE (object_vnum, ordinal)
 );
 CREATE INDEX IF NOT EXISTS idx_object_affects_object ON object_affects (object_vnum);
@@ -159,7 +183,9 @@ CREATE TABLE IF NOT EXISTS mobiles (
   saving_breath      INTEGER,
   saving_spell       INTEGER,
   trigger_vnums      TEXT NOT NULL CHECK (json_valid(trigger_vnums)),
-  source             TEXT
+  source             TEXT,
+  created_at         TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at         TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT}
 );
 CREATE INDEX IF NOT EXISTS idx_mobiles_zone ON mobiles (zone_vnum);
 
@@ -186,7 +212,9 @@ CREATE TABLE IF NOT EXISTS shops (
   close1              INTEGER NOT NULL,
   open2               INTEGER NOT NULL,
   close2              INTEGER NOT NULL,
-  source              TEXT
+  source              TEXT,
+  created_at          TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at          TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT}
 );
 CREATE INDEX IF NOT EXISTS idx_shops_keeper ON shops (keeper_vnum);
 CREATE INDEX IF NOT EXISTS idx_shops_zone ON shops (zone_vnum);
@@ -197,6 +225,8 @@ CREATE TABLE IF NOT EXISTS shop_buy_types (
   ordinal    INTEGER NOT NULL,
   item_type  TEXT NOT NULL,
   expression TEXT,
+  created_at TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
   UNIQUE (shop_vnum, ordinal)
 );
 CREATE INDEX IF NOT EXISTS idx_shop_buy_types_shop ON shop_buy_types (shop_vnum);
@@ -211,7 +241,9 @@ CREATE TABLE IF NOT EXISTS triggers (
   numeric_arg   INTEGER NOT NULL,
   arg_list      TEXT,
   commands      TEXT NOT NULL CHECK (json_valid(commands)),
-  source        TEXT
+  source        TEXT,
+  created_at    TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at    TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT}
 );
 CREATE INDEX IF NOT EXISTS idx_triggers_zone ON triggers (zone_vnum);
 
@@ -241,7 +273,9 @@ CREATE TABLE IF NOT EXISTS quests (
   gold_reward        INTEGER NOT NULL,
   experience_reward  INTEGER NOT NULL,
   object_reward_vnum INTEGER,
-  source             TEXT
+  source             TEXT,
+  created_at         TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT},
+  updated_at         TEXT NOT NULL DEFAULT ${TIMESTAMP_DEFAULT}
 );
 CREATE INDEX IF NOT EXISTS idx_quests_questmaster ON quests (questmaster_vnum);
 CREATE INDEX IF NOT EXISTS idx_quests_zone ON quests (zone_vnum);

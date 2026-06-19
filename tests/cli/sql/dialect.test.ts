@@ -106,6 +106,41 @@ describe('D1SqliteDialect', () => {
     expect(ddl).toContain('ON DELETE CASCADE');
   });
 
+  it('every table in the DDL has created_at and updated_at columns', () => {
+    const ddl = D1SqliteDialect.createTables();
+    const tableNames = [
+      'zones',
+      'zone_commands',
+      'rooms',
+      'room_exits',
+      'room_extra_descriptions',
+      'objects',
+      'object_extra_descriptions',
+      'object_affects',
+      'mobiles',
+      'shops',
+      'shop_buy_types',
+      'triggers',
+      'quests',
+    ];
+
+    // Split the DDL into per-table sections by splitting on CREATE TABLE boundaries.
+    // Each section runs from "CREATE TABLE IF NOT EXISTS <name>" up to the next one.
+    const sections = ddl.split(/(?=CREATE TABLE IF NOT EXISTS )/);
+
+    for (const tableName of tableNames) {
+      const section = sections.find((s) => s.includes(`CREATE TABLE IF NOT EXISTS ${tableName}`));
+      expect(section, `${tableName} should appear in DDL`).toBeDefined();
+      expect(section, `${tableName} should have created_at`).toContain('created_at');
+      expect(section, `${tableName} should have updated_at`).toContain('updated_at');
+    }
+  });
+
+  it('created_at and updated_at use STRFTIME millisecond default', () => {
+    const ddl = D1SqliteDialect.createTables();
+    expect(ddl).toContain("STRFTIME('%Y-%m-%dT%H:%M:%f', 'NOW')");
+  });
+
   it('DDL uses INSERT OR IGNORE pattern signalled in prefix', () => {
     const prefix = D1SqliteDialect.insertPrefix('rooms', ['vnum', 'name']);
     expect(prefix).toContain('INSERT OR IGNORE INTO rooms');

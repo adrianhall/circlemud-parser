@@ -216,6 +216,35 @@ describe('tbaMUD corpus SQL load', () => {
     expect(objCount).toBe(grouped.get(RecordType.Object)?.length ?? 0);
   });
 
+  it('created_at and updated_at are populated for every row', () => {
+    const db = loadIntoDb(sqlFiles);
+    // Check a sample from each table that has data
+    const tables = ['zones', 'rooms', 'mobiles', 'objects'];
+    for (const table of tables) {
+      const count = (db.prepare(`SELECT COUNT(*) as n FROM ${table}`).get() as { n: number }).n;
+      if (count === 0) continue;
+      const nullCreated = (
+        db.prepare(`SELECT COUNT(*) as n FROM ${table} WHERE created_at IS NULL`).get() as {
+          n: number;
+        }
+      ).n;
+      const nullUpdated = (
+        db.prepare(`SELECT COUNT(*) as n FROM ${table} WHERE updated_at IS NULL`).get() as {
+          n: number;
+        }
+      ).n;
+      expect(nullCreated, `${table}.created_at should be non-null for all rows`).toBe(0);
+      expect(nullUpdated, `${table}.updated_at should be non-null for all rows`).toBe(0);
+      // Spot-check one row: timestamps should look like ISO-8601 with milliseconds
+      const row = db.prepare(`SELECT created_at, updated_at FROM ${table} LIMIT 1`).get() as {
+        created_at: string;
+        updated_at: string;
+      };
+      expect(row.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}$/);
+      expect(row.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}$/);
+    }
+  });
+
   it('second apply is a no-op (idempotency via INSERT OR IGNORE)', () => {
     const db = loadIntoDb(sqlFiles);
     const countBefore = (db.prepare('SELECT COUNT(*) as n FROM rooms').get() as { n: number }).n;
